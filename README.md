@@ -26,8 +26,10 @@
 - client class job's to read, write, parse requests
 - client should send headers and body separately, so we don't need to buffer entire response (could cause performance issues in case of large files)
 - config class job's to parse configuration, and answer global config question of client (ex: is POST request for this path registered)
+- use EPOLLONESHOT + array of size 100000 indexed by fd
 
 ## Global TODO
 - writes tests in python
 - benchmarks
 - run tests in github actions?
+

@@ -1,5 +1,7 @@
 #pragma once
 
+class LocationBlock;
+
 class Block {
 	private:
 		size_t	_index;
@@ -7,21 +9,22 @@ class Block {
 		bool _auto_index;
 		std::string	_cgi;
 		std::string _root;
-		std::vector<std::string &> _methods;
-		std::map <std::string, std::string> _locations;
-		std::map <int, std::string &> _errors;
+		std::string _redirection;
+		std::vector<HttpMethod> _methods;
+		std::map <std::string, LocationBlock &> _locations;
+		// std::map <int, std::string &> _errors;
 
 		// getters
 		int getBodySize(void) const;
 		bool getAutoIndex(void) const;
-		const std::string &getCGI(void) const;
 		const std::string &getRoot(void) const;
-		const std::vector<std::string &> &getMethods(void) const;
-		const std::map<int, std::string &> &getErrors(void) const;
+		const std::vector<HttpMethod> &getMethods(void) const;
 		// parsing
-		void	parseInt(int *dst);
-		void	parseBool(bool *dst);
-		void	parseAndValidateString(std::string *dst, bool (*validate)(char));
-		void	parserMethods(void);
-		void	parserLocation(void);
+		const std::string &parsePath(const std:string &line);
+		void	parseInt(const std::string &line, int *dst);
+		void	parseBool(const std::string &line, bool *dst);
+		void	parseCGI(const std::string &line);
+		void	parseMethods(const std::string &line);
+		void	parseRedirection(const std::string &line);
+		void	parseLocation(const std::string &line);
 };
