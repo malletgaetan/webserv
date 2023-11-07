@@ -45,3 +45,13 @@ std::string generate_tabs(int n)
     }
     return tabs;
 }
+
+bool	is_lower(char c)
+{
+	return (c >= 'a' && c <= 'z');
+}
+
+bool	is_lower_upper(char c)
+{
+	return (is_lower(c) || (c >= 'A' && c <= 'Z'));
+}

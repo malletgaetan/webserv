@@ -25,7 +25,6 @@ LocationBlock::LocationBlock(const LocationBlock *b, std::ifstream &f): _index(0
 	throw RuntimeError("expected '}' but got EOF at line %zu", Config::line);
 }
 
-
 LocationBlock::~LocationBlock()
 {
 }
@@ -98,7 +97,7 @@ void	LocationBlock::parseRoot(const std::string &line)
 {
 	if (_index == line.size() || !isspace(line[_index]))
 		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
-	this->_root = this->parsePath(line);
+	this->_root = this->parsePath(line, &is_lower_upper);
 	if (this->_root[0] != '/') {
 		char cwd[1024];
 		if (getcwd(cwd, sizeof(cwd)) == NULL)
@@ -153,7 +152,7 @@ void	LocationBlock::parseMethods(const std::string &line)
 	throw RuntimeError("exepcted http method at line %zu column %zu", Config::line, _index);
 }
 
-std::string LocationBlock::parsePath(const std::string &line)
+std::string LocationBlock::parsePath(const std::string &line, bool (*is_ok)(char c))
 {
 	if (_index == line.size() || !isspace(line[_index]))
 		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
@@ -165,7 +164,7 @@ std::string LocationBlock::parsePath(const std::string &line)
 			throw RuntimeError("unexpected 'newline' at line %zu column %zu", Config::line, _index);
 		if (isspace(line[_index]) || line[_index] == ';')
 			break ;
-		if (line[_index] <= 'z' && line[_index] >= 'a') {
+		if (is_ok(line[_index])) {
 			slash = true;
 		} else if (line[_index] == '/') {
 			if (slash == false) {
@@ -184,7 +183,7 @@ void	LocationBlock::parseLocation(const std::string &line, std::ifstream &f)
 {
 	if (_index == line.size() || !isspace(line[_index]))
 		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
-	const std::string location_path = this->parsePath(line);
+	const std::string location_path = this->parsePath(line, &is_lower);
 	expect_char(line, _index, '{');
 	LocationBlock *ptr = this;
 	this->_locations[location_path] = LocationBlock(ptr, f);

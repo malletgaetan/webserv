@@ -21,7 +21,7 @@ class LocationBlock {
 		// parsing
 		void	parseBlock(std::ifstream &f);
 		void	parseAttribute(const std::string &line, std::ifstream &f);
-		std::string parsePath(const std::string &line);
+		std::string parsePath(const std::string &line, bool (*is_ok)(char c));
 		void	parseInt(const std::string &line, int *dst);
 		void	parseBool(const std::string &line, bool *dst);
 		void	parseCGI(const std::string &line);
