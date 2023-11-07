@@ -1,7 +1,7 @@
 #include <iostream>
 #include "config/ServerBlock.hpp"
 #include "config/Config.hpp"
-#include "config/ParserUtils.hpp"
+#include "config/utils.hpp"
 
 ServerBlock::ServerBlock(std::ifstream &f): LocationBlock()
 {
@@ -77,19 +77,22 @@ void	ServerBlock::parseServerName(const std::string &line)
 void ServerBlock::printConfiguration(int indentation) const
 {
 	(void)indentation;
-	std::cout << "Server {" << std::endl;
-	std::cout << "listen " << _listen << std::endl;
+	std::cout << generate_tabs(indentation) << "Server {" << std::endl;
+	++indentation;
+	std::cout << generate_tabs(indentation) << "listen " << _listen << std::endl;
 	if (_server_name.size() != 0)
-		std::cout << "server_name " << _server_name << std::endl;
-	std::cout << "body_size " << _body_size << std::endl;
-	std::cout << "auto_index " << _auto_index << std::endl;
-	std::cout << "cgi " << _cgi << std::endl;
+		std::cout << generate_tabs(indentation) << "server_name " << _server_name << std::endl;
+	if (_body_size != -1)
+		std::cout << generate_tabs(indentation) << "body_size " << _body_size << std::endl;
+	std::cout << generate_tabs(indentation) << "auto_index " << _auto_index << std::endl;
+	if (_cgi.size() != 0)
+		std::cout << generate_tabs(indentation) << "cgi " << _cgi << std::endl;
 	if (_root.size() != 0)
-		std::cout << "root " << _root << std::endl;
+		std::cout << generate_tabs(indentation) << "root " << _root << std::endl;
 	if (_redirection.size() != 0)
-		std::cout << "redirection " << _redirection << std::endl;
+		std::cout << generate_tabs(indentation) << "redirection " << _redirection << std::endl;
 	if (_methods.size() != 0) {
-		std::cout << "methods";
+		std::cout << generate_tabs(indentation) << "methods";
 		for (size_t i = 0; i < _methods.size(); i++) {
 			std::cout << " ";
 			if (_methods[i] == GET) {
@@ -104,13 +107,9 @@ void ServerBlock::printConfiguration(int indentation) const
 		}
 		std::cout << std::endl;
 	}
-	// std::map<std::string, LocationBlock>::iterator it;
-    // for (it = _locations.begin(); it != _locations.end(); ++it) {
-    //     std::cout << it->first << " => " /* use it->second to access the LocationBlock object */;
-    //     // Use it->second to access the LocationBlock object
-    //     // Example:
-    //     // it->second.someFunction(); // Calling a member function of LocationBlock
-    //     std::cout << std::endl;
-    // }
-	std::cout << "}" << std::endl;
+	std::map<std::string, LocationBlock>::const_iterator it;
+    for (it = _locations.begin(); it != _locations.end(); ++it) {
+		it->second.printConfiguration(indentation + 1);
+    }
+	std::cout << generate_tabs(indentation - 1) << "}" << std::endl;
 }

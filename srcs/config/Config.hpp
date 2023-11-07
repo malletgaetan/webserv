@@ -5,7 +5,7 @@
 #include <cstring>
 #include <cstdlib>
 
-#include "config/ParserUtils.hpp"
+#include "config/utils.hpp"
 #include "config/ServerBlock.hpp"
 #include "RuntimeError.hpp"
 

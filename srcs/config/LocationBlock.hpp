@@ -4,7 +4,7 @@
 #include <map>
 #include <fstream>
 #include <config/enums.hpp>
-#include "config/ParserUtils.hpp"
+#include "config/utils.hpp"
 
 class LocationBlock {
 	protected:

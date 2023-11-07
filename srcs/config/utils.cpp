@@ -1,4 +1,4 @@
-#include "ParserUtils.hpp"
+#include "utils.hpp"
 #include "Config.hpp"
 
 size_t	skip_whitespaces(const std::string &line, size_t index)
@@ -35,4 +35,13 @@ void	expect_end_of_content(const std::string &line, size_t index)
 	index = expect_char(line, index, ';');
 	if (line.size() != index)
 		throw RuntimeError("expected 'newline' at line %zu column %zu", Config::line, index);
+}
+
+std::string generate_tabs(int n)
+{
+    std::string tabs;
+    for (int i = 0; i < n; i++) {
+        tabs += "\t";
+    }
+    return tabs;
 }
