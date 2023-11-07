@@ -2,16 +2,16 @@
 #include "config/LocationBlock.hpp"
 #include "config/Config.hpp"
 
-LocationBlock::LocationBlock(void): _index(0), _body_size(-1), _auto_index(false), _cgi(""), _root(""), _redirection("")
+LocationBlock::LocationBlock(void): _index(0), _body_limit(-1), _auto_index(false), _cgi_extension(""), _cgi_path(""), _root(""), _redirection("")
 {
 }
 
-LocationBlock::LocationBlock(const LocationBlock *b, std::ifstream &f): _index(0), _cgi(""), _redirection("")
+LocationBlock::LocationBlock(const LocationBlock *b, std::ifstream &f): _index(0), _cgi_extension(""), _cgi_path(""), _redirection("")
 {
 	// only these attributes are inherited from parent
 	this->_root = b->getRoot();
 	this->_methods = b->getMethods();
-	this->_body_size = b->getBodySize();
+	this->_body_limit = b->getBodySize();
 	this->_auto_index = b->getAutoIndex();
 	for (std::string line; std::getline(f, line);) {
 		++Config::line;
@@ -31,9 +31,10 @@ LocationBlock::~LocationBlock()
 
 void	LocationBlock::parseAttribute(const std::string &line, std::ifstream &f)
 {
-	if (line.compare(_index, 9, std::string("body_size")) == 0) {
-		_index += 9;
-		this->parseInt(line, &this->_body_size);
+	if (line.compare(_index, 10, std::string("body_limit")) == 0) {
+		_index += 10;
+		this->_body_limit = this->parseInt(line);
+		expect_end_of_content(line, _index);
 	} else if (line.compare(_index, 8, std::string("redirect")) == 0) {
 		_index += 8;
 		this->parseRedirection(line);
@@ -49,9 +50,9 @@ void	LocationBlock::parseAttribute(const std::string &line, std::ifstream &f)
 	} else if (line.compare(_index, 7, std::string("methods")) == 0) {
 		_index += 7;
 		this->parseMethods(line);
-	// } else if (line.compare(_index, 6, std::string("errors")) == 0) {
-	// 	_index += 6;
-	// 	this->parseErrors(line);
+	} else if (line.compare(_index, 5, std::string("error")) == 0) {
+		_index += 5;
+		this->parseError(line);
 	} else if (line.compare(_index, 8, std::string("location")) == 0) {
 		_index += 8;
 		this->parseLocation(line, f);
@@ -60,22 +61,20 @@ void	LocationBlock::parseAttribute(const std::string &line, std::ifstream &f)
 	}
 }
 
-// TODO implement functions
-// parsing
-void	LocationBlock::parseInt(const std::string &line, int *dst)
+int	LocationBlock::parseInt(const std::string &line)
 {
+	int	res = 0;
 	if (_index == line.size() || !isspace(line[_index]))
-		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
+		throw RuntimeError("unrecognized attribute at line %zu", Config::line, line[_index]);
 	_index = skip_whitespaces(line, _index);
-	*dst = 0;
 	if (!isdigit(line[_index]))
 		throw RuntimeError("expected digit at line %zu column %zu", Config::line, _index);
 	while (_index < line.size() && isdigit(line[_index])) {
-		*dst *= 10;
-		*dst += line[_index] - '0';
+		res *= 10;
+		res += line[_index] - '0';
 		++_index;
 	}
-	expect_end_of_content(line, _index);
+	return res;
 }
 
 void	LocationBlock::parseBool(const std::string &line, bool *dst)
@@ -97,13 +96,8 @@ void	LocationBlock::parseRoot(const std::string &line)
 {
 	if (_index == line.size() || !isspace(line[_index]))
 		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
-	this->_root = this->parsePath(line, &is_lower_upper);
-	if (this->_root[0] != '/') {
-		char cwd[1024];
-		if (getcwd(cwd, sizeof(cwd)) == NULL)
-			throw RuntimeError("failed to access current path");
-		this->_root = std::string(cwd) + std::string("/") + this->_root;
-	}
+	this->_root = this->parsePath(line, &is_filepath);
+	// complete_filepath(&this->_root);
 }
 
 void	LocationBlock::parseCGI(const std::string &line)
@@ -119,7 +113,8 @@ void	LocationBlock::parseCGI(const std::string &line)
 	_index = expect_word_in_range(line, _index, 'a', 'z');
 	if (_index == start_index + 1)
 		throw RuntimeError("cgi should contain letters at line %zu column %zu", Config::line, _index);
-	this->_cgi = line.substr(start_index, _index - start_index);
+	this->_cgi_extension = line.substr(start_index, _index - start_index);
+	this->_cgi_path = this->parsePath(line, &is_filepath);
 	expect_end_of_content(line, _index);
 }
 
@@ -131,16 +126,16 @@ void	LocationBlock::parseMethods(const std::string &line)
 		_index = skip_whitespaces(line, _index);
 		if (line.compare(_index, 3, "get") == 0) {
 			_index += 3;
-			this->_methods.push_back(GET);
+			this->_methods.push_back(HTTP::GET);
 		} else if (line.compare(_index, 4, "head") == 0) {
 			_index += 4;
-			this->_methods.push_back(HEAD);
+			this->_methods.push_back(HTTP::HEAD);
 		} else if (line.compare(_index, 4, "post") == 0) {
 			_index += 4;
-			this->_methods.push_back(POST);
+			this->_methods.push_back(HTTP::POST);
 		} else if (line.compare(_index, 5, "delete") == 0) {
 			_index += 6;
-			this->_methods.push_back(DELETE);
+			this->_methods.push_back(HTTP::DELETE);
 		} else {
 			throw RuntimeError("unrecognized http method at line %zu column %zu", Config::line, _index);
 		}
@@ -183,7 +178,7 @@ void	LocationBlock::parseLocation(const std::string &line, std::ifstream &f)
 {
 	if (_index == line.size() || !isspace(line[_index]))
 		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
-	const std::string location_path = this->parsePath(line, &is_lower);
+	const std::string location_path = this->parsePath(line, &is_uripath);
 	expect_char(line, _index, '{');
 	LocationBlock *ptr = this;
 	this->_locations[location_path] = LocationBlock(ptr, f);
@@ -225,20 +220,45 @@ void	LocationBlock::parseRedirection(const std::string &line)
 			if (sep == false)
 				throw RuntimeError("unvalid redirect URL at line %zu column %zu", Config::line, _index);
 			sep = false;
-		} else if (line[_index] < 'a' || line[_index] > 'z') {
+		} else if (!is_uripath(line[_index])) {
 			throw RuntimeError("unvalid redirect URL at line %zu column %zu", Config::line, _index);
 		}
 		sep = true;
 		++_index;
 	}
-	this->_redirection = line.substr(_index, _index - start_index);
+	_redirection = line.substr(start_index, _index - start_index);
 	expect_end_of_content(line, _index);
+}
+
+void	LocationBlock::parseError(const std::string &line)
+{
+	int http_error = this->parseInt(line);
+	if (_index == line.size() || !isspace(line[_index]))
+		throw RuntimeError("expected filepath after error code at line %zu column %zu", Config::line, _index);
+	std::string errorpath = this->parsePath(line, &is_filepath);
+	// complete_filepath(&errorpath);
+	expect_end_of_content(line, _index);
+	this->loadError(http_error, errorpath);
+}
+
+void	LocationBlock::loadError(int http_status, const std::string &path)
+{
+	std::ifstream file(path.c_str());
+    std::string content;
+    if (!file)
+		throw RuntimeError("failed to open error page %s at line %zu", path.c_str(), Config::line);
+	file.seekg(0, std::ios::end);
+	content.resize(file.tellg());
+	file.seekg(0, std::ios::beg);
+	file.read(&content[0], content.size());
+	file.close();
+	this->_errors[http_status] = content;
 }
 
 // getters
 int LocationBlock::getBodySize(void) const
 {
-	return this->_body_size;
+	return this->_body_limit;
 }
 
 bool LocationBlock::getAutoIndex(void) const
@@ -251,21 +271,18 @@ const std::string &LocationBlock::getRoot(void) const
 	return this->_root;
 }
 
-const std::vector<HttpMethod> &LocationBlock::getMethods(void) const
+const std::vector<HTTP::Method> &LocationBlock::getMethods(void) const
 {
 	return this->_methods;
 }
 
-
-void LocationBlock::printConfiguration(int indentation) const
+void LocationBlock::printState(int indentation) const
 {
-	std::cout << generate_tabs(indentation) << "Location {" << std::endl;
-	++indentation;
-	if (_body_size != -1)
-		std::cout << generate_tabs(indentation) << "body_size " << _body_size << std::endl;
+	if (_body_limit != -1)
+		std::cout << generate_tabs(indentation) << "body_limit " << _body_limit << std::endl;
 	std::cout << generate_tabs(indentation) << "auto_index " << _auto_index << std::endl;
-	if (_cgi.size() != 0)
-		std::cout << generate_tabs(indentation) << "cgi " << _cgi << std::endl;
+	if (_cgi_extension.size() != 0)
+		std::cout << generate_tabs(indentation) << "cgi " << _cgi_extension << " " << _cgi_path << std::endl;
 	if (_root.size() != 0)
 		std::cout << generate_tabs(indentation) << "root " << _root << std::endl;
 	if (_redirection.size() != 0)
@@ -274,11 +291,11 @@ void LocationBlock::printConfiguration(int indentation) const
 		std::cout << generate_tabs(indentation) << "methods";
 		for (size_t i = 0; i < _methods.size(); i++) {
 			std::cout << " ";
-			if (_methods[i] == GET) {
+			if (_methods[i] == HTTP::GET) {
 				std::cout << "GET";
-			} else if (_methods[i] == POST) {
+			} else if (_methods[i] == HTTP::POST) {
 				std::cout << "POST";
-			} else if (_methods[i] == DELETE) {
+			} else if (_methods[i] == HTTP::DELETE) {
 				std::cout << "DELETE";
 			} else {
 				std::cout << "HEAD";
@@ -286,14 +303,30 @@ void LocationBlock::printConfiguration(int indentation) const
 		}
 		std::cout << std::endl;
 	}
+	if (_errors.size() != 0) {
+		std::map<int, std::string>::const_iterator it;
+		for (it = _errors.begin(); it != _errors.end(); ++it) {
+			std::cout << generate_tabs(indentation) << "errors " << it->first << std::endl;
+		}
+	}
+
 	std::map<std::string, LocationBlock>::const_iterator it;
     for (it = _locations.begin(); it != _locations.end(); ++it) {
 		it->second.printConfiguration(indentation + 1);
     }
-	std::cout << generate_tabs(indentation - 1) << "}" << std::endl;
 }
 
-// const std::map<int, std::string &> &LocationBlock::getErrors(void) const
-// {
-// 	return this->_errors;
-// }
+void LocationBlock::printConfiguration(int indentation) const
+{
+	std::cout << generate_tabs(indentation) << "Location {" << std::endl;
+	this->printState(indentation + 1);
+	std::cout << generate_tabs(indentation) << "}" << std::endl;
+}
+
+const std::string *LocationBlock::getErrorPage(int http_code) const
+{
+	std::map<int, std::string>::const_iterator it = _errors.find(http_code);
+	if (it == _errors.end())
+		return HTTP::default_error(http_code);
+	return &(it->second);
+}

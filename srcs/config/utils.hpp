@@ -8,5 +8,6 @@ size_t	expect_char(const std::string &line, size_t index, char expected);
 size_t	expect_word_in_range(const std::string &line, size_t index, char start, char end);
 void	expect_end_of_content(const std::string &line, size_t index);
 std::string generate_tabs(int n);
-bool	is_lower(char c);
-bool	is_lower_upper(char c);
+bool	is_uripath(char c);
+bool	is_filepath(char c);
+void	complete_filepath(std::string *path);

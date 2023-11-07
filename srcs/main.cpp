@@ -1,6 +1,7 @@
 #include <iostream>
 #include "config/Config.hpp"
 #include "RuntimeError.hpp"
+#include "http.hpp"
 
 struct args {
 	bool debug;
@@ -33,6 +34,7 @@ int	main(int argc, char **argv)
 		std::cout << "\t-d debug mode" << std::endl;
 		return (0);
 	}
+	HTTP::init_errors();
 	try {
 		Config::parseFile(f.configpath);
 		if (f.debug)

@@ -46,12 +46,23 @@ std::string generate_tabs(int n)
     return tabs;
 }
 
-bool	is_lower(char c)
+bool	is_uripath(char c)
 {
-	return (c >= 'a' && c <= 'z');
+	return ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c == '-');
 }
 
-bool	is_lower_upper(char c)
+bool	is_filepath(char c)
 {
-	return (is_lower(c) || (c >= 'A' && c <= 'Z'));
+	return (isalnum(c) || c == '.' || c == '_' || c == '-');
+}
+
+// TODO: delete possible dead code
+void	complete_filepath(std::string *path)
+{
+	if ((*path)[0] != '/') {
+		char cwd[1024];
+		if (getcwd(cwd, sizeof(cwd)) == NULL)
+			throw RuntimeError("failed to access current path");
+		*path = std::string(cwd) + std::string("/") + (*path);
+	}
 }
