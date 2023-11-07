@@ -26,7 +26,7 @@ size_t	expect_word_in_range(const std::string &line, size_t index, char start, c
 			throw RuntimeError("unrecognized token at line %zu column %zu, expected range <%c-%c>", Config::line, index, start, end);
 		++index;
 	}
-	throw RuntimeError("unrecognized token at line %zu column %zu, expected range <%c-%c>", Config::line, index, start, end);
+	throw RuntimeError("unexpected 'newline' at line %zu column %zu", Config::line, index, start, end);
 }
 
 void	expect_end_of_content(const std::string &line, size_t index)

@@ -166,6 +166,7 @@ std::string LocationBlock::parsePath(const std::string &line)
 void	LocationBlock::parseLocation(const std::string &line, std::ifstream &f)
 {
 	const std::string location_path = this->parsePath(line);
+	expect_char(line, _index, '{');
 	LocationBlock *ptr = this;
 	this->_locations[location_path] = LocationBlock(ptr, f);
 }
