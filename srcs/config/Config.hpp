@@ -44,7 +44,6 @@ class Config {
 				} else {
 					throw RuntimeError("unrecognized attribute at line %zu column %zu", Config::line, index);
 				}
-				++Config::line;
 			}
 			if (_nb_workers == 0) {
 				try {

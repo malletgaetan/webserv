@@ -15,32 +15,14 @@ ServerBlock::ServerBlock(std::ifstream &f): LocationBlock()
 		if (line.compare(_index, 6, std::string("listen")) == 0) {
 			_index += 6;
 			this->parseInt(line, &this->_listen);
-		} else if (line.compare(_index, 9, std::string("body_size")) == 0) {
-			_index += 9;
-			this->parseInt(line, &this->_body_size);
-		} else if (line.compare(_index, 10, std::string("auto_index")) == 0) {
-			_index += 10;
-			this->parseBool(line, &this->_auto_index);
-		} else if (line.compare(_index, 3, std::string("cgi")) == 0) {
-			_index += 3;
-			this->parseCGI(line);
 		} else if (line.compare(_index, 11, std::string("server_name")) == 0) {
 			_index += 11;
 			this->parseServerName(line);
-		} else if (line.compare(_index, 7, std::string("methods")) == 0) {
-			_index += 7;
-			this->parseMethods(line);
-		// } else if (line.compare(_index, 6, std::string("errors")) == 0) {
-		// 	_index += 6;
-		// 	this->parseErrors(line);
-		} else if (line.compare(_index, 8, std::string("location")) == 0) {
-			_index += 8;
-			this->parseLocation(line, f);
 		} else {
-			throw RuntimeError("unrecognized attribute at line %zu column %zu", Config::line, _index);
+			this->parseAttribute(line, f);
 		}
 	}
-	throw RuntimeError("expected '}' but got EOF at line %zu column %zu", Config::line, _index);
+	throw RuntimeError("expected '}' but got EOF", Config::line, _index);
 }
 
 ServerBlock::~ServerBlock()
