@@ -1,11 +1,10 @@
 NAME = webserv
 CXX = clang++
 RM = rm -f
-CXXFLAGS = -Wall -Wextra -Werror -I.
+CXXFLAGS = -Wall -Wextra -Werror -I ./srcs
 
 SRCS = $(shell find ./srcs -name '*.cpp')
 OBJS = $(SRCS:.cpp=.o)
-
 
 all: $(NAME)
 

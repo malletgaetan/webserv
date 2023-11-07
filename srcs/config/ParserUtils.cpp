@@ -1,7 +1,7 @@
 #include "ParserUtils.hpp"
 #include "Config.hpp"
 
-size_t	skip_whitespaces(const std:string &line, size_t index)
+size_t	skip_whitespaces(const std::string &line, size_t index)
 {
 	while (index < line.size() && isspace(line[index]))
 		++index;
@@ -20,7 +20,7 @@ size_t	expect_word_in_range(const std::string &line, size_t index, char start, c
 {
 	index = skip_whitespaces(line, index);
 	while (index < line.size()) {
-		if (isspace(line[index]))
+		if (isspace(line[index]) || line[index] == ';')
 			return index;
 		if (line[index] < start || line[index] > end)
 			throw RuntimeError("unrecognized token at line %zu column %zu, expected range <%c-%c>", Config::line, index, start, end);
@@ -32,7 +32,7 @@ size_t	expect_word_in_range(const std::string &line, size_t index, char start, c
 void	expect_end_of_content(const std::string &line, size_t index)
 {
 	index = skip_whitespaces(line, index);
-	index = expect_char(line, _index, ';');
+	index = expect_char(line, index, ';');
 	if (line.size() != index)
 		throw RuntimeError("expected 'newline' at line %zu column %zu", Config::line, index);
 }

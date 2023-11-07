@@ -1,13 +1,14 @@
 #pragma once
 
-#include "config/Block.hpp"
+#include "config/LocationBlock.hpp"
 
-class ServerBlock: public Block {
+class ServerBlock: public LocationBlock {
 	private:
 		int	_listen;
 		std::string _server_name;
 	public:
-		ServerBlock();
+		ServerBlock(std::ifstream &f);
 		~ServerBlock();
 		void	parseServerName(const std::string &line);
+		void printConfiguration(int indentation) const;
 };

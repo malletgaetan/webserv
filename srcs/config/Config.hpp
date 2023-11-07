@@ -9,20 +9,7 @@
 #include "config/ServerBlock.hpp"
 #include "RuntimeError.hpp"
 
-int get_num_cpu_cores(void)
-{
-    std::ifstream cpuinfo("/proc/cpuinfo");
-    int numCores = 0;
-    std::string line;
-
-    while (std::getline(cpuinfo, line)) {
-        if (line.substr(0, 9) == "processor") {
-            numCores++;
-        }
-    }
-
-    return numCores;
-}
+int get_num_cpu_cores(void);
 
 class Config {
 	private:
@@ -35,18 +22,15 @@ class Config {
 		{
 			std::ifstream fs(filepath, std::ifstream::in);
 			for (std::string line; std::getline(fs, line); ) {
-				// match "server" | "worker"
+				++Config::line;
 				size_t	index = skip_whitespaces(line, 0);
-				if (line[index] == ';') {
-					++Config::line;
+				if (index == line.size() || line[index] == ';' || line[index] == '#') {
 					continue ;
 				}
 				if (line.compare(index, 6, std::string("server")) == 0) {
-					index = expect_word_in_range(line, index + 6, '{', '{');
-					index = expect_char(line, index + 1, ';');
+					index = skip_whitespaces(line, index + 6);
+					index = expect_char(line, index, '{');
 					index = skip_whitespaces(line, index);
-					if (index != line.size())
-						throw RuntimeError("expected end of line at line %zu column %zu", Config::line, index);
 					_server_blocks.push_back(ServerBlock(fs));
 				} else if (line.compare(index, 7, std::string("workers")) == 0) {
 					if (_nb_workers != 0)
@@ -54,13 +38,11 @@ class Config {
 					index = skip_whitespaces(line, index + 7);
 					_nb_workers = atoi(line.c_str() + index);
 					index = expect_word_in_range(line, index, '0', '9');
-					index = expect_char(line, index, ';');
-					if (index != line.size())
-						throw RuntimeError("expected end of line at line %zu column %zu", Config::line, index);
+					expect_end_of_content(line, index);
 					if (_nb_workers < 1)
 						throw RuntimeError("number of workers should be a postive integer at line %zu column %zu", Config::line, index);
 				} else {
-					throw RuntimeError("unregonized attribute at line %zu column %zu", Config::line, index);
+					throw RuntimeError("unrecognized attribute at line %zu column %zu", Config::line, index);
 				}
 				++Config::line;
 			}
@@ -72,9 +54,15 @@ class Config {
 				}
 			}
 		}
-		const Server &matchServer(std::string &path)
+		static void printConfiguration(void)
 		{
-			// find closest ServerBlock configuration to path
-
+			for (std::vector<ServerBlock>::iterator it = _server_blocks.begin(); it != _server_blocks.end(); ++it) {
+				it->printConfiguration(0);
+			}
 		}
+		// const ServerBlock &matchServer(std::string &path)
+		// {
+		// 	// find closest ServerBlock configuration to path
+
+		// }
 };
