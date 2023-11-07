@@ -10,5 +10,6 @@ class ServerBlock: public LocationBlock {
 		ServerBlock(std::ifstream &f);
 		~ServerBlock();
 		void	parseServerName(const std::string &line);
-		void printConfiguration(int indentation) const;
+		void	printConfiguration(int indentation) const;
+		bool	matchHost(const std::string &host);
 };

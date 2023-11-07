@@ -8,6 +8,7 @@
 
 class LocationBlock {
 	protected:
+		int		_depth;
 		size_t	_index;
 		int _body_limit;
 		bool _auto_index;
@@ -34,7 +35,7 @@ class LocationBlock {
 		void	parseRoot(const std::string &line);
 		void	printState(int indentation) const;
 	public:
-		LocationBlock();
+		LocationBlock(void);
 		LocationBlock(const LocationBlock *b, std::ifstream &f);
 		~LocationBlock();
 		void printConfiguration(int indentation) const;
@@ -44,4 +45,6 @@ class LocationBlock {
 		const std::string &getRoot(void) const;
 		const std::vector<HTTP::Method> &getMethods(void) const;
 		const std::string *getErrorPage(int http_code) const;
+		int	getDepth(void) const;
+		const LocationBlock *matchLocation(const std::string &path, size_t index) const;
 };

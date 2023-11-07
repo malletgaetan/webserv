@@ -2,17 +2,18 @@
 #include "config/LocationBlock.hpp"
 #include "config/Config.hpp"
 
-LocationBlock::LocationBlock(void): _index(0), _body_limit(-1), _auto_index(false), _cgi_extension(""), _cgi_path(""), _root(""), _redirection("")
+LocationBlock::LocationBlock(void): _depth(1), _index(0), _body_limit(-1), _auto_index(false), _cgi_extension(""), _cgi_path(""), _root(""), _redirection("")
 {
 }
 
 LocationBlock::LocationBlock(const LocationBlock *b, std::ifstream &f): _index(0), _cgi_extension(""), _cgi_path(""), _redirection("")
 {
 	// only these attributes are inherited from parent
-	this->_root = b->getRoot();
-	this->_methods = b->getMethods();
-	this->_body_limit = b->getBodySize();
-	this->_auto_index = b->getAutoIndex();
+	_root = b->getRoot();
+	_methods = b->getMethods();
+	_body_limit = b->getBodySize();
+	_auto_index = b->getAutoIndex();
+	_depth = b->getDepth() + 1;
 	for (std::string line; std::getline(f, line);) {
 		++Config::line;
 		_index = skip_whitespaces(line, 0);
@@ -255,27 +256,6 @@ void	LocationBlock::loadError(int http_status, const std::string &path)
 	this->_errors[http_status] = content;
 }
 
-// getters
-int LocationBlock::getBodySize(void) const
-{
-	return this->_body_limit;
-}
-
-bool LocationBlock::getAutoIndex(void) const
-{
-	return this->_auto_index;
-}
-
-const std::string &LocationBlock::getRoot(void) const
-{
-	return this->_root;
-}
-
-const std::vector<HTTP::Method> &LocationBlock::getMethods(void) const
-{
-	return this->_methods;
-}
-
 void LocationBlock::printState(int indentation) const
 {
 	if (_body_limit != -1)
@@ -329,4 +309,48 @@ const std::string *LocationBlock::getErrorPage(int http_code) const
 	if (it == _errors.end())
 		return HTTP::default_error(http_code);
 	return &(it->second);
+}
+
+const LocationBlock *LocationBlock::matchLocation(const std::string &path, size_t index) const
+{
+	std::map<std::string, LocationBlock>::const_iterator it;
+	const LocationBlock *ret = this; // default to itself
+	for (it = _locations.begin(); it != _locations.end(); ++it) {
+		size_t next_slash = path.find_first_of("/", index + 1);
+		if (it->first.compare(0, next_slash - index, it->first) != 0)
+			continue ;
+		if (path.compare(index, it->first.size(), it->first) == 0) // TODO optimize this, bc reitering on already checked first part
+			return &(it->second);
+		const LocationBlock *p = it->second.matchLocation(path, next_slash);
+		if (p->getDepth() > ret->getDepth())
+			ret = p;
+	}
+	return ret;
+}
+
+// getters
+int LocationBlock::getBodySize(void) const
+{
+	return this->_body_limit;
+}
+
+bool LocationBlock::getAutoIndex(void) const
+{
+	return this->_auto_index;
+}
+
+const std::string &LocationBlock::getRoot(void) const
+{
+	return this->_root;
+}
+
+const std::vector<HTTP::Method> &LocationBlock::getMethods(void) const
+{
+	return this->_methods;
+}
+
+
+int	LocationBlock::getDepth(void) const
+{
+	return _depth;
 }

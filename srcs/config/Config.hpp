@@ -59,9 +59,16 @@ class Config {
 				it->printConfiguration(0);
 			}
 		}
-		// const ServerBlock &matchServer(std::string &path)
-		// {
-		// 	// find closest ServerBlock configuration to path
-
-		// }
+		const LocationBlock *matchConfig(std::string &host, std::string &path)
+		{
+			std::vector<ServerBlock>::iterator it = _server_blocks.begin(); // default to first server declaration
+			ServerBlock &s = *it;
+			for (; it != _server_blocks.end(); ++it) {
+				if (it->matchHost(host)) {
+					s = *it;
+					break ;
+				}
+			}
+			return s.matchLocation(path, 0);
+		}
 };
