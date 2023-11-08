@@ -182,6 +182,7 @@ void	LocationBlock::parseLocation(const std::string &line, std::ifstream &f)
 	const std::string location_path = this->parsePath(line, &is_uripath);
 	expect_char(line, _index, '{');
 	LocationBlock *ptr = this;
+	// TODO: check if location_path already exist => don't create new LocationBlock, just update the existing one
 	this->_locations[location_path] = LocationBlock(ptr, f);
 }
 
