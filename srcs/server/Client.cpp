@@ -4,8 +4,8 @@
 
 Client::Client()
 {
-	if (Client::_buf == NULL) {
-		Client::_buf = new char[CLIENT_BUFFER_SIZE];
+	if (_buf == NULL) {
+		_buf = new char[CLIENT_BUFFER_SIZE];
 		if (!_buf) 
 			throw std::runtime_error("failed to allocate client buffer");
 	}
@@ -13,9 +13,10 @@ Client::Client()
 
 Client::~Client()
 {
-	if (buf == NULL)
+	if (_buf == NULL)
 		return ;
-	delete buf;
+	delete _buf;
+	_buf = NULL;
 }
 
 State Client::getState(void)
@@ -40,12 +41,19 @@ const std::time_t &Client::getLastActivity(void) const
 
 void Client::sendRequestTimeout(void)
 {
-	return ;
+	try {
+		this->http_status = 408;
+		this->sendErrorResponse();
+	} catch (std::runtime_error &e) {
+		std::cerr << "Failed to send 408 Request Timeout to client." << std::endl;
+	}
 }
 
 void Client::sendInternalServerError(void)
 {
-	return ;
+	this->http_status = 500;
+	this->sendErrorResponse();
+	this->state = RECEIVING;
 }
 
 bool Client::readHandler(void)
@@ -60,14 +68,67 @@ bool Client::writeHandler(void)
 
 void Client::parseRequest(void)
 {
-	return ;
+	_config = config;
+	size_t first_space = _request_buf.find(' '); // TODO: should only parse on current request
+	size_t second_space = _request_buf.find(' ', first_space + 1);
+
+	// TODO read the host header, and matchHost with host header, path and port
+	if (first_space == std::string::npos || second_space == std::string::npos || first_space >= this->eor) {
+		_http_status = 400;
+		_response_handler = &_sendErrorResponse;
+		return ;
+	}
+
+	switch (_request_buf[0]) { // bit hacky
+		case 'G':
+			this->method = GET;
+			break;
+		case 'P':
+			this->method = POST;
+			break;
+		case 'H':
+			this->method = HEAD;
+			break;
+		case 'D':
+			this->method = DELETE;
+			break;
+		default:
+			_http_status = 400;
+			_response_handler = &_sendErrorResponse;
+			return ;
+	}
+
+	_http_path = config->getRoot() + _request_buf.substr(first_space + 1, second_space - first_space - 1);
+	if (_http_path.back() == "/")
+		_http_path = _http_path + config->getIndex();
+	_request_buf.erase(0, _eor + 4); // _eor + 4 end characters of HTTP request
 }
 
 // PRIVATE
 static char *Client::_buf = NULL;
 
-void Client::_sendErrorHeaders(void);
-void Client::_sendErrorResponse(void);
-void Client::_sendHeaders(void);
-bool Client::_sendStaticResponse(void);
-bool Client::_sendRedirectResponse(void);
+void Client::_sendErrorHeaders(void)
+{
+	return ;
+}
+
+void Client::_sendHeaders(void)
+{
+	return ;
+}
+
+void Client::_sendErrorResponse(void)
+{
+	return ;
+}
+
+
+bool Client::_sendStaticResponse(void)
+{
+	return true;
+}
+
+bool Client::_sendRedirectResponse(void)
+{
+	return true;
+}

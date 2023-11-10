@@ -35,61 +35,33 @@ enum Method {
 class Client
 {
 	public:
-	    typedef bool (Client::*ResponseHandler)();
-		static char *buf;
-		static ssize_t buf_size;
-		static const Config *config;
-		static void initializeBuffer(size_t size)
-		{
-			if (buf != NULL)
-				return ;
-			buf = new char[size];
-			if (!buf) 
-				throw std::runtime_error("Failed to allocate Client Buffer.");
-			buf_size = size;
-		}
-		static void initializeConfig(const Config *c)
-		{
-			config = c;
-		}
-		static void destroyBuffer()
-		{
-			if (buf == NULL)
-				return ;
-			delete buf;
-		}
 		Client(int fd);
 		~Client(void);
 		int getState(void);
 		int  getFd(void);
-		int getPipe(void);
 		void setLastActivity(std::time_t &now);
 		const std::time_t &getLastActivity(void) const;
-		void requestTimeout(void);
-		void internalServerError(void);
-		bool consume(void);
-		bool answer(void);
+		void sendRequestTimeout(void);
+		void sendInternalServerError(void);
+		bool readHandler(void);
+		bool writeHandler(void);
 		void parseRequest(void);
-		int  startCGI(void);
-		void stopCGI(void);
-		bool isCGI(void);
 	private:
-		size_t eor; // end of request
-		std::string http_path;
-		State state;
-		Method method;
-		int fd, fddata, http_status, pipe[2];
-		std::string request_buf;
-		const std::string *errortosend;
-		std::time_t last_activity_time;
-		ResponseHandler responseHandler;
+	    typedef bool (Client::*ResponseHandler)();
+		static char *_buf;
+		size_t _eor; // end of last request
+		State _state;
+		Method _method;
+		int _fd, _static_fd, _http_status;
+		std::string _http_path, _request_buf;
+		std::time_t _last_activity;
+		ResponseHandler _response_handler;
+		const LocationBlock *config;
 
-		void setPath(std::string path);
-		bool setMethod(size_t end);
-		void sendErrorHeaders(void);
-		void sendErrorResponse(void);
-		void sendHeaders(void);
-		bool sendStaticResponse(void);
-		bool sendCGIResponse(void);
-		bool sendRedirectResponse(void);
+		void _sendErrorHeaders(void);
+		void _sendErrorResponse(void);
+		void _sendHeaders(void);
+		bool _sendStaticResponse(void);
+		bool _sendCGIResponse(void);
+		bool _sendRedirectResponse(void);
 };

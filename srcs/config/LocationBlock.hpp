@@ -20,26 +20,25 @@ class LocationBlock {
 		std::map<std::string, LocationBlock> _locations;
 		std::map<int, std::string> _errors;
 
-		// parsing
-		void	parseBlock(std::ifstream &f);
-		void	parseAttribute(const std::string &line, std::ifstream &f);
-		int		parseInt(const std::string &line);
-		void	parseBool(const std::string &line, bool *dst);
-		std::string parsePath(const std::string &line, bool (*is_ok)(char c));
-		void	parseCGI(const std::string &line);
-		void	parseMethods(const std::string &line);
-		void	parseRedirection(const std::string &line);
-		void	parseLocation(const std::string &line, std::ifstream &f);
-		void	parseError(const std::string &line);
-		void	loadError(int http_status, const std::string &path);
-		void	parseRoot(const std::string &line);
-		void	printState(int indentation) const;
+		void	_parseBlock(std::ifstream &f);
+		void	_parseAttribute(const std::string &line, std::ifstream &f);
+		int		_parseInt(const std::string &line);
+		void	_parseBool(const std::string &line, bool *dst);
+		std::string _parsePath(const std::string &line, bool (*is_ok)(char c));
+		void	_parseCGI(const std::string &line);
+		void	_parseIndex(const std::string &line);
+		void	_parseMethods(const std::string &line);
+		void	_parseRedirection(const std::string &line);
+		void	_parseLocation(const std::string &line, std::ifstream &f);
+		void	_parseError(const std::string &line);
+		void	_loadError(int http_status, const std::string &path);
+		void	_parseRoot(const std::string &line);
+		void	_printState(int indentation) const;
 	public:
 		LocationBlock(void);
 		LocationBlock(const LocationBlock *b, std::ifstream &f);
 		~LocationBlock();
 		void printConfiguration(int indentation) const;
-		// getters
 		int getBodySize(void) const;
 		bool getAutoIndex(void) const;
 		const std::string &getRoot(void) const;

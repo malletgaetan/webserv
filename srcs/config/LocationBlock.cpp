@@ -2,6 +2,8 @@
 #include "config/LocationBlock.hpp"
 #include "config/Config.hpp"
 
+// PUBLIC
+
 LocationBlock::LocationBlock(void): _depth(1), _index(0), _body_limit(-1), _auto_index(false), _cgi_extension(""), _cgi_path(""), _root(""), _redirection("")
 {
 }
@@ -21,7 +23,7 @@ LocationBlock::LocationBlock(const LocationBlock *b, std::ifstream &f): _index(0
 			continue ;
 		if (line[_index] == '}')
 			return ;
-		this->parseAttribute(line, f);
+		this->_parseAttribute(line, f);
 	}
 	throw RuntimeError("expected '}' but got EOF at line %zu", Config::line);
 }
@@ -30,39 +32,102 @@ LocationBlock::~LocationBlock()
 {
 }
 
-void	LocationBlock::parseAttribute(const std::string &line, std::ifstream &f)
+void LocationBlock::printConfiguration(int indentation) const
+{
+	std::cout << generate_tabs(indentation) << "Location {" << std::endl;
+	this->printState(indentation + 1);
+	std::cout << generate_tabs(indentation) << "}" << std::endl;
+}
+
+const std::string *LocationBlock::getErrorPage(int http_code) const
+{
+	std::map<int, std::string>::const_iterator it = _errors.find(http_code);
+	if (it == _errors.end())
+		return HTTP::default_error(http_code);
+	return &(it->second);
+}
+
+const LocationBlock *LocationBlock::matchLocation(const std::string &path, size_t index) const
+{
+	std::map<std::string, LocationBlock>::const_iterator it;
+	const LocationBlock *ret = this; // default to itself
+	for (it = _locations.begin(); it != _locations.end(); ++it) {
+		size_t next_slash = path.find_first_of("/", index + 1);
+		if (it->first.compare(0, next_slash - index, it->first) != 0)
+			continue ;
+		if (path.compare(index, it->first.size(), it->first) == 0) // TODO optimize this, bc reitering on already checked first part
+			return &(it->second);
+		const LocationBlock *p = it->second.matchLocation(path, next_slash);
+		if (p->getDepth() > ret->getDepth())
+			ret = p;
+	}
+	return ret;
+}
+
+int LocationBlock::getBodySize(void) const
+{
+	return this->_body_limit;
+}
+
+bool LocationBlock::getAutoIndex(void) const
+{
+	return this->_auto_index;
+}
+
+const std::string &LocationBlock::getRoot(void) const
+{
+	return this->_root;
+}
+
+const std::vector<HTTP::Method> &LocationBlock::getMethods(void) const
+{
+	return this->_methods;
+}
+
+
+int	LocationBlock::getDepth(void) const
+{
+	return _depth;
+}
+
+// PRIVATE
+
+void	LocationBlock::_parseAttribute(const std::string &line, std::ifstream &f)
 {
 	if (line.compare(_index, 10, std::string("body_limit")) == 0) {
 		_index += 10;
-		this->_body_limit = this->parseInt(line);
+		this->_body_limit = this->_parseInt(line);
 		expect_end_of_content(line, _index);
 	} else if (line.compare(_index, 8, std::string("redirect")) == 0) {
 		_index += 8;
-		this->parseRedirection(line);
+		this->_parseRedirection(line);
 	} else if (line.compare(_index, 10, std::string("auto_index")) == 0) {
 		_index += 10;
-		this->parseBool(line, &this->_auto_index);
+		this->_parseBool(line, &this->_auto_index);
 	} else if (line.compare(_index, 3, std::string("cgi")) == 0) {
 		_index += 3;
-		this->parseCGI(line);
+		this->_parseCGI(line);
 	} else if (line.compare(_index, 4, std::string("root")) == 0) {
 		_index += 4;
-		this->parseRoot(line);
+		this->_parseRoot(line);
+	 } else if (line.compare(_index, 5, std::string("index")) == 0) {
+		_index += 5;
+		this->_parseIndex(line);
 	} else if (line.compare(_index, 7, std::string("methods")) == 0) {
 		_index += 7;
-		this->parseMethods(line);
+		this->_parseMethods(line);
 	} else if (line.compare(_index, 5, std::string("error")) == 0) {
 		_index += 5;
-		this->parseError(line);
+		this->_parseError(line);
 	} else if (line.compare(_index, 8, std::string("location")) == 0) {
 		_index += 8;
-		this->parseLocation(line, f);
+		this->_parseLocation(line, f);
 	} else {
 		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
 	}
 }
 
-int	LocationBlock::parseInt(const std::string &line)
+int	LocationBlock::_parseInt(const std::string &line)
 {
 	int	res = 0;
 	if (_index == line.size() || !isspace(line[_index]))
@@ -78,7 +143,7 @@ int	LocationBlock::parseInt(const std::string &line)
 	return res;
 }
 
-void	LocationBlock::parseBool(const std::string &line, bool *dst)
+void	LocationBlock::_parseBool(const std::string &line, bool *dst)
 {
 	if (_index == line.size() || !isspace(line[_index]))
 		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
@@ -93,15 +158,22 @@ void	LocationBlock::parseBool(const std::string &line, bool *dst)
 	expect_end_of_content(line, _index);
 }
 
-void	LocationBlock::parseRoot(const std::string &line)
+void	LocationBlock::_parseRoot(const std::string &line)
 {
 	if (_index == line.size() || !isspace(line[_index]))
 		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
-	this->_root = this->parsePath(line, &is_filepath);
-	// complete_filepath(&this->_root);
+	this->_root = this->_parsePath(line, &is_filepath);
 }
 
-void	LocationBlock::parseCGI(const std::string &line)
+void	LocationBlock::_parseIndex(const std::string &line)
+{
+	if (_index == line.size() || !isspace(line[_index]))
+		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
+	_index = _parsePath(line, &is_filepath);
+	expect_end_of_content(line, _index);
+}
+
+void	LocationBlock::_parseCGI(const std::string &line)
 {
 	if (_index == line.size() || !isspace(line[_index]))
 		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
@@ -115,11 +187,11 @@ void	LocationBlock::parseCGI(const std::string &line)
 	if (_index == start_index + 1)
 		throw RuntimeError("cgi should contain letters at line %zu column %zu", Config::line, _index);
 	this->_cgi_extension = line.substr(start_index, _index - start_index);
-	this->_cgi_path = this->parsePath(line, &is_filepath);
+	this->_cgi_path = this->_parsePath(line, &is_filepath);
 	expect_end_of_content(line, _index);
 }
 
-void	LocationBlock::parseMethods(const std::string &line)
+void	LocationBlock::_parseMethods(const std::string &line)
 {
 	if (_index == line.size() || !isspace(line[_index]))
 		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
@@ -148,7 +220,7 @@ void	LocationBlock::parseMethods(const std::string &line)
 	throw RuntimeError("exepcted http method at line %zu column %zu", Config::line, _index);
 }
 
-std::string LocationBlock::parsePath(const std::string &line, bool (*is_ok)(char c))
+std::string LocationBlock::_parsePath(const std::string &line, bool (*is_ok)(char c))
 {
 	if (_index == line.size() || !isspace(line[_index]))
 		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
@@ -175,18 +247,18 @@ std::string LocationBlock::parsePath(const std::string &line, bool (*is_ok)(char
 	return line.substr(start_index, _index - start_index);
 }
 
-void	LocationBlock::parseLocation(const std::string &line, std::ifstream &f)
+void	LocationBlock::_parseLocation(const std::string &line, std::ifstream &f)
 {
 	if (_index == line.size() || !isspace(line[_index]))
 		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
-	const std::string location_path = this->parsePath(line, &is_uripath);
+	const std::string location_path = this->_parsePath(line, &is_uripath);
 	expect_char(line, _index, '{');
 	LocationBlock *ptr = this;
 	// TODO: check if location_path already exist => don't create new LocationBlock, just update the existing one
 	this->_locations[location_path] = LocationBlock(ptr, f);
 }
 
-void	LocationBlock::parseRedirection(const std::string &line)
+void	LocationBlock::_parseRedirection(const std::string &line)
 {
 	if (_index == line.size() || !isspace(line[_index]))
 		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
@@ -232,18 +304,17 @@ void	LocationBlock::parseRedirection(const std::string &line)
 	expect_end_of_content(line, _index);
 }
 
-void	LocationBlock::parseError(const std::string &line)
+void	LocationBlock::_parseError(const std::string &line)
 {
-	int http_error = this->parseInt(line);
+	int http_error = this->_parseInt(line);
 	if (_index == line.size() || !isspace(line[_index]))
 		throw RuntimeError("expected filepath after error code at line %zu column %zu", Config::line, _index);
-	std::string errorpath = this->parsePath(line, &is_filepath);
-	// complete_filepath(&errorpath);
+	std::string errorpath = this->_parsePath(line, &is_filepath);
 	expect_end_of_content(line, _index);
 	this->loadError(http_error, errorpath);
 }
 
-void	LocationBlock::loadError(int http_status, const std::string &path)
+void	LocationBlock::_loadError(int http_status, const std::string &path)
 {
 	std::ifstream file(path.c_str());
     std::string content;
@@ -257,7 +328,7 @@ void	LocationBlock::loadError(int http_status, const std::string &path)
 	this->_errors[http_status] = content;
 }
 
-void LocationBlock::printState(int indentation) const
+void LocationBlock::_printState(int indentation) const
 {
 	if (_body_limit != -1)
 		std::cout << generate_tabs(indentation) << "body_limit " << _body_limit << std::endl;
@@ -297,61 +368,3 @@ void LocationBlock::printState(int indentation) const
     }
 }
 
-void LocationBlock::printConfiguration(int indentation) const
-{
-	std::cout << generate_tabs(indentation) << "Location {" << std::endl;
-	this->printState(indentation + 1);
-	std::cout << generate_tabs(indentation) << "}" << std::endl;
-}
-
-const std::string *LocationBlock::getErrorPage(int http_code) const
-{
-	std::map<int, std::string>::const_iterator it = _errors.find(http_code);
-	if (it == _errors.end())
-		return HTTP::default_error(http_code);
-	return &(it->second);
-}
-
-const LocationBlock *LocationBlock::matchLocation(const std::string &path, size_t index) const
-{
-	std::map<std::string, LocationBlock>::const_iterator it;
-	const LocationBlock *ret = this; // default to itself
-	for (it = _locations.begin(); it != _locations.end(); ++it) {
-		size_t next_slash = path.find_first_of("/", index + 1);
-		if (it->first.compare(0, next_slash - index, it->first) != 0)
-			continue ;
-		if (path.compare(index, it->first.size(), it->first) == 0) // TODO optimize this, bc reitering on already checked first part
-			return &(it->second);
-		const LocationBlock *p = it->second.matchLocation(path, next_slash);
-		if (p->getDepth() > ret->getDepth())
-			ret = p;
-	}
-	return ret;
-}
-
-// getters
-int LocationBlock::getBodySize(void) const
-{
-	return this->_body_limit;
-}
-
-bool LocationBlock::getAutoIndex(void) const
-{
-	return this->_auto_index;
-}
-
-const std::string &LocationBlock::getRoot(void) const
-{
-	return this->_root;
-}
-
-const std::vector<HTTP::Method> &LocationBlock::getMethods(void) const
-{
-	return this->_methods;
-}
-
-
-int	LocationBlock::getDepth(void) const
-{
-	return _depth;
-}
