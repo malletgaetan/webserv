@@ -23,6 +23,9 @@ ServerBlock::ServerBlock(std::ifstream &f): LocationBlock()
 			this->parseAttribute(line, f);
 		}
 	}
+	if (_listen < 0 || _listen > 65535)
+		throw RuntimeError("invalid range for listen port at line %zu", Config::line);
+	Config::ports.push_back(_listen);
 	throw RuntimeError("expected '}' but got EOF", Config::line, _index);
 }
 
@@ -53,6 +56,12 @@ void	ServerBlock::parseServerName(const std::string &line)
 		++_index;
 	}
 	this->_server_name = line.substr(start_index, _index - start_index);
+}
+
+
+bool	ServerBlock::matchHost(const std::string &host) const
+{
+	return host == _server_name;
 }
 
 void ServerBlock::printConfiguration(int indentation) const

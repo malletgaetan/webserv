@@ -11,5 +11,5 @@ class ServerBlock: public LocationBlock {
 		~ServerBlock();
 		void	parseServerName(const std::string &line);
 		void	printConfiguration(int indentation) const;
-		bool	matchHost(const std::string &host);
+		bool	matchHost(const std::string &host) const;
 };
