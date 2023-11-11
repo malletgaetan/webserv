@@ -10,12 +10,14 @@ class LocationBlock {
 	protected:
 		int		_depth;
 		size_t	_index;
+
 		int _body_limit;
 		bool _auto_index;
 		std::string	_cgi_extension;
 		std::string	_cgi_path;
 		std::string _root;
 		std::string _redirection;
+		std::string	_index_str;
 		std::vector<HTTP::Method> _methods;
 		std::map<std::string, LocationBlock> _locations;
 		std::map<int, std::string> _errors;
@@ -42,8 +44,9 @@ class LocationBlock {
 		int getBodySize(void) const;
 		bool getAutoIndex(void) const;
 		const std::string &getRoot(void) const;
+		const std::string &getIndex(void) const;
 		const std::vector<HTTP::Method> &getMethods(void) const;
-		const std::string *getErrorPage(int http_code) const;
+		const std::string &getErrorPage(int http_code) const;
 		int	getDepth(void) const;
-		const LocationBlock *matchLocation(const std::string &path, size_t index) const;
+		std::pair<size_t, const LocationBlock *> matchLocation(const std::string &path, size_t index) const;
 };

@@ -3,29 +3,32 @@
 #include "config/Config.hpp"
 #include "config/utils.hpp"
 
-ServerBlock::ServerBlock(std::ifstream &f): LocationBlock()
+ServerBlock::ServerBlock(std::ifstream &f, int default_port): LocationBlock()
 {
 	for (std::string line; std::getline(f, line);) {
 		++Config::line;
 		_index = skip_whitespaces(line, 0);
 		if (_index == line.size() || line[_index] == '#' || line[_index] == ';')
 			continue ;
-		if (line[_index] == '}')
+		if (line[_index] == '}') {
+			if (_ports.size() == 0)
+				_ports.push_back(default_port);
 			return ;
+		}
 		if (line.compare(_index, 6, std::string("listen")) == 0) {
 			_index += 6;
-			this->_listen = this->parseInt(line);
+			while (line[_index] != ';')
+				_ports.push_back(_parseInt(line));
+			if (_ports.back() < 0 || _ports.back() > 65535)
+				throw RuntimeError("invalid range for listen port at line %zu column %zu", Config::line, _index);
 			expect_end_of_content(line, _index);
 		} else if (line.compare(_index, 11, std::string("server_name")) == 0) {
 			_index += 11;
-			this->parseServerName(line);
+			_parseServerName(line);
 		} else {
-			this->parseAttribute(line, f);
+			_parseAttribute(line, f);
 		}
 	}
-	if (_listen < 0 || _listen > 65535)
-		throw RuntimeError("invalid range for listen port at line %zu", Config::line);
-	Config::ports.push_back(_listen);
 	throw RuntimeError("expected '}' but got EOF", Config::line, _index);
 }
 
@@ -33,7 +36,7 @@ ServerBlock::~ServerBlock()
 {
 }
 
-void	ServerBlock::parseServerName(const std::string &line)
+void	ServerBlock::_parseServerName(const std::string &line)
 {
 	_index = skip_whitespaces(line, _index);
 	bool point = false;
@@ -55,21 +58,33 @@ void	ServerBlock::parseServerName(const std::string &line)
 		}
 		++_index;
 	}
-	this->_server_name = line.substr(start_index, _index - start_index);
+	_server_name = line.substr(start_index, _index - start_index);
+	if (_server_name.size() == 0)
+		throw RuntimeError("missing server_name value at line %zu", Config::line);
 }
 
 
-bool	ServerBlock::matchHost(const std::string &host) const
+std::string ServerBlock::getHost(void) const
 {
-	return host == _server_name;
+	return _server_name;
 }
 
 void ServerBlock::printConfiguration(int indentation) const
 {
 	std::cout << generate_tabs(indentation) << "Server {" << std::endl;
-	std::cout << generate_tabs(indentation + 1) << "listen " << _listen << std::endl;
+	std::cout << generate_tabs(indentation + 1) << "listen";
+	for (std::vector<int>::const_iterator it = _ports.begin(); it != _ports.end(); ++it) {
+		std::cout << " " << *it;
+	}
+	std::cout << std::endl;
 	if (_server_name.size() != 0)
 		std::cout << generate_tabs(indentation + 1) << "server_name " << _server_name << std::endl;
-	this->printState(indentation + 1);
+	_printState(indentation + 1);
 	std::cout << generate_tabs(indentation) << "}" << std::endl;
 }
+
+const std::vector<int> &ServerBlock::getPorts(void) const
+{
+	return _ports;
+}
+

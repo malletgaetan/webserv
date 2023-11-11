@@ -56,13 +56,3 @@ bool	is_filepath(char c)
 	return (isalnum(c) || c == '.' || c == '_' || c == '-');
 }
 
-// TODO: delete possible dead code
-void	complete_filepath(std::string *path)
-{
-	if ((*path)[0] != '/') {
-		char cwd[1024];
-		if (getcwd(cwd, sizeof(cwd)) == NULL)
-			throw RuntimeError("failed to access current path");
-		*path = std::string(cwd) + std::string("/") + (*path);
-	}
-}

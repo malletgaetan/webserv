@@ -21,6 +21,9 @@ extern "C" {
 #include <stdexcept>
 #include <map>
 #include <ctime>
+#include <vector>
+
+#include "server/Client.hpp"
 
 #define MAX_EVENTS 2048
 #define LISTEN_BACKLOG 10
@@ -52,7 +55,7 @@ class Server
 		bool _running;
 		void _handleTimeouts(void);
 		void _replaceClientEvents(int clientfd, uint32_t op);
-		void _addClient(void);
+		void _acceptClient(int fd, int port);
 		void _removeClient(Client *client);
 		void _eventLoop(void);
 	public:

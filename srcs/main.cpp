@@ -1,5 +1,6 @@
 #include <iostream>
 #include "config/Config.hpp"
+#include "server/Server.hpp"
 #include "RuntimeError.hpp"
 #include "http.hpp"
 
@@ -39,9 +40,11 @@ int	main(int argc, char **argv)
 		Config::parseFile(f.configpath);
 		if (f.debug)
 			Config::printConfiguration();
-		const LocationBlock *b = Config::matchConfig(std::string("react.com"), std::string("/old_website"));
-		std::cout << b->getRoot() << std::endl;
+		Server s = Server();
+		s.serve();
 	} catch(RuntimeError &e) {
 		std::cerr << "failed to parse configuration: " << e.what() << std::endl;
+	} catch(std::runtime_error &e) {
+		std::cerr << "runtime_error: " << e.what() << std::endl;
 	}
 }

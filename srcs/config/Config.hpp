@@ -13,46 +13,50 @@ int get_num_cpu_cores(void);
 
 class Config {
 	private:
-		static std::vector<ServerBlock> _server_blocks;
-		
+		static std::vector<ServerBlock> _servers;
+		static std::map<int, std::map<const std::string, const ServerBlock *> > _ordered_servers;
+
 	public:
-		std::vector<int>	ports;
 		static size_t	line;
+		static std::vector<int> ports;
 		static void parseFile(const char *filepath)
 		{
 			std::ifstream fs(filepath, std::ifstream::in);
+			int	default_port = geteuid() ? 8000 : 80;
 			for (std::string line; std::getline(fs, line); ) {
 				++Config::line;
 				size_t	index = skip_whitespaces(line, 0);
-				if (index == line.size() || line[index] == ';' || line[index] == '#') {
+				if (index == line.size() || line[index] == ';' || line[index] == '#')
 					continue ;
-				}
 				if (line.compare(index, 6, std::string("server")) == 0) {
 					index = skip_whitespaces(line, index + 6);
 					index = expect_char(line, index, '{');
 					index = skip_whitespaces(line, index);
-					_server_blocks.push_back(ServerBlock(fs));
+					_servers.push_back(ServerBlock(fs, default_port));
+					const std::vector<int> &ports = _servers.back().getPorts();
+					for (std::vector<int>::const_iterator it = ports.begin(); it != ports.end(); ++it) {
+						_ordered_servers[*it][_servers.back().getHost()] = &_servers.back();
+					}
 				} else {
 					throw RuntimeError("unrecognized attribute at line %zu column %zu", Config::line, index);
 				}
 			}
+			// TODO: this could be implemented an other way
+			for (std::map<int, std::map<const std::string, const ServerBlock *> >::const_iterator it = _ordered_servers.begin(); it != _ordered_servers.end(); ++it)
+				ports.push_back(it->first);
 		}
 		static void printConfiguration(void)
 		{
-			for (std::vector<ServerBlock>::iterator it = _server_blocks.begin(); it != _server_blocks.end(); ++it) {
+			for (std::vector<ServerBlock>::const_iterator it = _servers.begin(); it != _servers.end(); ++it) {
 				it->printConfiguration(0);
 			}
 		}
-		static const LocationBlock *matchConfig(const std::string &host, const std::string &path)
+		static const LocationBlock *matchConfig(const std::string &host, const std::string &location, int port)
 		{
-			std::vector<ServerBlock>::iterator it = _server_blocks.begin(); // default to first server declaration
-			ServerBlock &s = *it;
-			for (; it != _server_blocks.end(); ++it) {
-				if (it->matchHost(host)) {
-					s = *it;
-					break ;
-				}
-			}
-			return s.matchLocation(path, 0);
+			const std::map<const std::string, const ServerBlock *> &servers_by_host = _ordered_servers[port]; // port exist for sure
+			const std::map<const std::string, const ServerBlock *>::const_iterator it = servers_by_host.find(host);
+			const ServerBlock * server = it == servers_by_host.end() ? servers_by_host.begin()->second : it->second; // default server to the first one with same port
+			
+			return server->matchLocation(location, 0).second;
 		}
 };

@@ -4,12 +4,15 @@
 
 class ServerBlock: public LocationBlock {
 	private:
-		int	_listen;
+		std::vector<int> _ports;
 		std::string _server_name;
+
+		void	_parseServerName(const std::string &line);
 	public:
-		ServerBlock(std::ifstream &f);
+		ServerBlock(std::ifstream &f, int default_port);
 		~ServerBlock();
-		void	parseServerName(const std::string &line);
 		void	printConfiguration(int indentation) const;
 		bool	matchHost(const std::string &host) const;
+		std::string getHost(void) const;
+		const std::vector<int> &getPorts(void) const;
 };

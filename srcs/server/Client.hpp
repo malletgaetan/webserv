@@ -19,6 +19,12 @@ extern "C" {
 #include <sstream>
 #include <ctime>
 
+#include "config/LocationBlock.hpp"
+
+#ifndef CLIENT_BUFFER_SIZE
+# define CLIENT_BUFFER_SIZE 1000000 // default to 1 megabyte
+#endif
+
 enum State {
 	RECEIVING,
 	PARSING,
@@ -35,33 +41,33 @@ enum Method {
 class Client
 {
 	public:
-		Client(int fd);
+		Client(int fd, int port);
 		~Client(void);
-		int getState(void);
+		State getState(void);
 		int  getFd(void);
 		void setLastActivity(std::time_t &now);
 		const std::time_t &getLastActivity(void) const;
 		void sendRequestTimeout(void);
 		void sendInternalServerError(void);
-		bool readHandler(void);
-		bool writeHandler(void);
+		bool readHandler(void); // return whether client should be deleted
+		void writeHandler(void);
 		void parseRequest(void);
 	private:
-	    typedef bool (Client::*ResponseHandler)();
+	    typedef void (Client::*ResponseHandler)(void);
 		static char *_buf;
+		int		_port;
 		size_t _eor; // end of last request
 		State _state;
 		Method _method;
 		int _fd, _static_fd, _http_status;
-		std::string _http_path, _request_buf;
+		std::string _static_filepath, _request_buf;
 		std::time_t _last_activity;
 		ResponseHandler _response_handler;
-		const LocationBlock *config;
+		const LocationBlock *_config;
 
-		void _sendErrorHeaders(void);
+		void _sendHeaders(size_t content_length);
 		void _sendErrorResponse(void);
-		void _sendHeaders(void);
-		bool _sendStaticResponse(void);
-		bool _sendCGIResponse(void);
-		bool _sendRedirectResponse(void);
+		void _sendStaticResponse(void);
+		/* bool _sendCGIResponse(void); */
+		void _sendRedirectResponse(void);
 };

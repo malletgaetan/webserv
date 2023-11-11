@@ -1,11 +1,12 @@
+#include "config/Config.hpp"
 #include "server/Server.hpp"
 #include "config/LocationBlock.hpp"
 
 // PUBLIC
 
-Server::Server(): _socklen(sizeof(struct sockaddr_in)), nfds(0), _running(false)
+Server::Server(): _socklen(sizeof(struct sockaddr_in)), _epfd(0), _running(false)
 {
-	_events = new struct sockaddr_in[MAX_EVENTS];
+	_events = new struct epoll_event[MAX_EVENTS];
 }
 
 Server::~Server(void)
@@ -18,10 +19,11 @@ void Server::stop(void)
 	std::map<int, Client *>::iterator iter = _clients.begin();
 
 	// close epoll
-	close(_epfd);
+	if (_epfd)
+		close(_epfd);
 
 	// close servers
-	for (int i = 0; i < _server_fds.size(); i++) {
+	for (size_t i = 0; i < _server_fds.size(); i++) {
 		close(_server_fds[i]);
 	}
 
@@ -32,29 +34,6 @@ void Server::stop(void)
 		_removeClient(c);
 	}
 }
-
-void Server::serve(void)
-{
-	int	ret;
-	struct sockaddr_in addr;
-
-	memset(&addr, 0, sizeof(struct sockaddr_in));
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = htons(INADDR_ANY);
-    _epfd = epoll_create1(0);
-	if (_epfd < 0)
-		throw std::runtime_error("failed to create epoll");
-
-	for (int i = 0; i < Config::ports.size(); i++) {
-		addr.sin_port = htons(Config::ports[i]);
-		_addServer(&addr);
-	}
-
-	this->running = true;
-	this->eventLoop();
-}
-
-// PRIVATE
 
 static int	create_server_socket(struct sockaddr_in *sockaddr)
 {
@@ -78,16 +57,35 @@ static int	create_server_socket(struct sockaddr_in *sockaddr)
 	return (fd);
 }
 
-void	Server::_addServer(struct sockaddr_in *addr)
+void Server::serve(void)
 {
-	int	fd = create_server_socket(&(addrs[i]));
-	_server_fds.push_back(fd);
-    _ev.events = EPOLLIN | EPOLLRDHUP | EPOLLERR; // EPOLLERR is default but usefull for readers
-    _ev.data.fd = fd;
-    ret = epoll_ctl(_epfd, EPOLL_CTL_ADD, fd, &_ev);
-    if (0 > ret)
-		throw std::runtime_error("failed to add tcp socket to epoll");
+	int	ret, fd;
+	struct sockaddr_in addr;
+
+	memset(&addr, 0, sizeof(struct sockaddr_in));
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = htons(INADDR_ANY);
+    _epfd = epoll_create1(0);
+	if (_epfd < 0)
+		throw std::runtime_error("failed to create epoll");
+	_ev.events = EPOLLIN | EPOLLRDHUP | EPOLLERR; // EPOLLERR is default but usefull for readers
+
+	for (size_t i = 0; i < Config::ports.size(); i++) {
+		addr.sin_port = htons(Config::ports[i]);
+		fd = create_server_socket(&addr);
+		_server_fds.push_back(fd);
+		_ev.data.fd = fd;
+		_ev.data.ptr = &(Config::ports[i]);
+		ret = epoll_ctl(_epfd, EPOLL_CTL_ADD, fd, &_ev);
+		if (0 > ret)
+			throw std::runtime_error("failed to add tcp socket to epoll");
+	}
+
+	_running = true;
+	_eventLoop();
 }
+
+// PRIVATE
 
 void Server::_replaceClientEvents(int clientfd, uint32_t op)
 {
@@ -98,17 +96,17 @@ void Server::_replaceClientEvents(int clientfd, uint32_t op)
 		throw std::runtime_error("failed to modify client event");
 }
 
-void Server::_acceptClient(void)
+void Server::_acceptClient(int fd, int port)
 {
 	int cfd, ret;
 	Client *c;
-	cfd = accept(_tcpfd, (struct sockaddr *)&_csin, &_socklen);
+	cfd = accept(fd, (struct sockaddr *)&_csin, &_socklen);
 	if (cfd < 0) {
 		std::cerr << "runtime_error: failed to accept new client" << std::endl;
 		return ;
 	}
-	c = new Client(cfd);
-	_clients.insert(std::make_pair(cfd, ));
+	c = new Client(cfd, port);
+	_clients.insert(std::make_pair(cfd, c));
 	_ev.events = EPOLLIN;
 	_ev.data.fd = cfd;
 	_ev.data.ptr = c;
@@ -137,7 +135,7 @@ void Server::_handleTimeouts(void)
 
 	while (iter != _clients.end()) {
 		if (std::difftime(now, iter->second->getLastActivity()) > CLIENT_TIMEOUT) {
-			iter->second->sendTimeout();
+			iter->second->sendRequestTimeout();
 			c = iter->second;
 			++iter;
 			_removeClient(c);
@@ -150,11 +148,9 @@ void Server::_handleTimeouts(void)
 void Server::_eventLoop(void)
 {
 	Client *client;
-	LocationBlock *config_block;
 	int j, nfds;
-	std::time_t now, new_now;
+	std::time_t now;
 
-	now = std::time(NULL);
 	j = 0;
     while (true)
     {
@@ -166,21 +162,21 @@ void Server::_eventLoop(void)
 			throw std::runtime_error("failed to retrieve events from epoll");
 		}
 		++j;
-		new_now = std::time(NULL);
+		now = std::time(NULL);
         for (int i = 0; i < nfds; i++) {
 			try {
-				if (events[i].data.fd == _tcpfd) {
-					_acceptClient();
+				if (_events[i].data.ptr >= &(Config::ports[0]) && _events[i].data.ptr <= &(Config::ports[Config::ports.size() - 1])) { // hacky again
+					_acceptClient(_events[i].data.fd, *(int *)_events[i].data.ptr);
 					continue ;
 				}
-				client = events[i].data.ptr;
+				client = (Client *)_events[i].data.ptr;
 				client->setLastActivity(now);
 				if (_events[i].events & EPOLLIN) {
 					if (client->readHandler())
 						_removeClient(client);
 					if (client->getState() != RECEIVING) // changed state
 						_replaceClientEvents(client->getFd(), EPOLLOUT);
-				} else if (events[i].events & EPOLLOUT) {
+				} else if (_events[i].events & EPOLLOUT) {
 					try {
 						if (client->getState() == PARSING)
 							client->parseRequest(); // parse request and set handler
