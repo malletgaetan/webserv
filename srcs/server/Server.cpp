@@ -18,20 +18,19 @@ Server::~Server(void)
 
 void Server::stop(void)
 {
-	return ;
 	Client *c;
 	std::map<int, Client *>::iterator iter = _clients.begin();
 
-	close epoll
+	// close epoll
 	if (_epfd)
 		close(_epfd);
 
-	close servers
-	for (size_t i = 0; i < _server_fds.size(); i++) {
-		close(_server_fds[i]);
+	// close servers
+	for (size_t i = 0; i < Config::ports.size(); i++) {
+		close(_servers[i].second);
 	}
 
-	close clients
+	// close clients
 	while (iter != _clients.end()) {
 		c = iter->second;
 		++iter;
@@ -74,13 +73,14 @@ void Server::serve(void)
 		throw std::runtime_error("failed to create epoll");
 	_ev.events = EPOLLIN | EPOLLRDHUP | EPOLLERR; // EPOLLERR is default but usefull for readers
 
+	_servers = new std::pair<int, int>[Config::ports.size()];
+
 	for (size_t i = 0; i < Config::ports.size(); i++) {
 		addr.sin_port = htons(Config::ports[i]);
 		fd = create_server_socket(&addr);
-		_server_fds.push_back(fd);
-		_ev.data.fd = fd;
-		_ev.data.ptr = &(Config::ports[i]);
-		std::cout << "adding fd " << fd << std::endl;
+		_servers[i].first = fd;
+		_servers[i].second = Config::ports[i];
+		_ev.data.ptr = _servers + i;
 		ret = epoll_ctl(_epfd, EPOLL_CTL_ADD, fd, &_ev);
 		if (ret != 0)
 			throw std::runtime_error("failed to add tcp socket to epoll");
@@ -92,30 +92,27 @@ void Server::serve(void)
 
 // PRIVATE
 
-void Server::_replaceClientEvents(int clientfd, uint32_t op)
+void Server::_replaceClientEvents(Client *c, uint32_t op)
 {
     _ev.events = op | EPOLLRDHUP | EPOLLERR; // EPOLLERR is default but usefull for readers
-    _ev.data.fd = clientfd;
-    int ret = epoll_ctl(_epfd, EPOLL_CTL_MOD, clientfd, &_ev);
+	_ev.data.ptr = c;
+    int ret = epoll_ctl(_epfd, EPOLL_CTL_MOD, c->getFd(), &_ev);
 	if (ret < 0)
 		throw std::runtime_error("failed to modify client event");
 }
 
-void Server::_acceptClient(int fd, int port)
+void Server::_acceptClient(std::pair<int, int> *server)
 {
 	int cfd, ret;
 	Client *c;
-	cfd = accept(fd, (struct sockaddr *)&_csin, &_socklen);
+	cfd = accept(server->first, (struct sockaddr *)&_csin, &_socklen);
 	if (cfd < 0) {
-		std::cerr << strerror(errno) << std::endl;
-		// std::cerr << "runtime_error: failed to accept new client" << std::endl;
+		std::cerr << "runtime_error: failed to accept new client" << std::endl;
 		return ;
 	}
-	std::cout << "GOOD" << std::endl;
-	c = new Client(cfd, port);
+	c = new Client(cfd, Config::getServers(server->second));
 	_clients.insert(std::make_pair(cfd, c));
-	_ev.events = EPOLLIN;
-	_ev.data.fd = cfd;
+	_ev.events = EPOLLIN | EPOLLRDHUP | EPOLLERR; // EPOLLERR is default but usefull for readers
 	_ev.data.ptr = c;
 	ret = epoll_ctl(_epfd, EPOLL_CTL_ADD, cfd, &_ev);
 	if (ret < 0) {
@@ -171,10 +168,9 @@ void Server::_eventLoop(void)
 		++j;
 		now = std::time(NULL);
         for (int i = 0; i < nfds; i++) {
-			std::cout << "value on file descriptor " << i << ": " << _events[i].data.fd << std::endl;
 			try {
-				if ((_events[i].data.ptr >= &(Config::ports[0])) && (_events[i].data.ptr <= &(Config::ports[Config::ports.size() - 1]))) {
-					_acceptClient(_events[i].data.fd, *(int *)_events[i].data.ptr);
+				if ((_events[i].data.ptr >= _servers) && (_events[i].data.ptr <= (_servers + Config::ports.size() - 1))) {
+					_acceptClient((std::pair<int, int> *)_events[i].data.ptr);
 					continue ;
 				}
 				client = (Client *)_events[i].data.ptr;
@@ -183,7 +179,7 @@ void Server::_eventLoop(void)
 					if (client->readHandler())
 						_removeClient(client);
 					if (client->getState() != RECEIVING) // changed state
-						_replaceClientEvents(client->getFd(), EPOLLOUT);
+						_replaceClientEvents(client, EPOLLOUT);
 				} else if (_events[i].events & EPOLLOUT) {
 					try {
 						if (client->getState() == PARSING)
@@ -193,7 +189,7 @@ void Server::_eventLoop(void)
 						client->sendInternalServerError();
 					}
 					if (client->getState() != SENDING) // changed state
-						_replaceClientEvents(client->getFd(), EPOLLIN);
+						_replaceClientEvents(client, EPOLLIN);
 				} else {
 					// EPOLLERR | EPOLLRDHUP
 					_removeClient(client);

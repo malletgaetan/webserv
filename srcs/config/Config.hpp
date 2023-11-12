@@ -47,16 +47,11 @@ class Config {
 		}
 		static void printConfiguration(void)
 		{
-			for (std::vector<ServerBlock>::const_iterator it = _servers.begin(); it != _servers.end(); ++it) {
+			for (std::vector<ServerBlock>::const_iterator it = _servers.begin(); it != _servers.end(); ++it)
 				it->printConfiguration(0);
-			}
 		}
-		static const LocationBlock *matchConfig(const std::string &host, const std::string &location, int port)
+		static const std::map<const std::string, const ServerBlock *> *getServers(int port)
 		{
-			const std::map<const std::string, const ServerBlock *> &servers_by_host = _ordered_servers[port]; // port exist for sure
-			const std::map<const std::string, const ServerBlock *>::const_iterator it = servers_by_host.find(host);
-			const ServerBlock * server = it == servers_by_host.end() ? servers_by_host.begin()->second : it->second; // default server to the first one with same port
-			
-			return server->matchLocation(location, 0).second;
+			return &_ordered_servers[port];
 		}
 };

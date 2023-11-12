@@ -41,7 +41,7 @@ enum Method {
 class Client
 {
 	public:
-		Client(int fd, int port);
+		Client(int fd, const std::map<const std::string, const ServerBlock *> *servers_by_host);
 		~Client(void);
 		State getState(void);
 		int  getFd(void);
@@ -55,7 +55,7 @@ class Client
 	private:
 	    typedef void (Client::*ResponseHandler)(void);
 		static char *_buf;
-		int		_port;
+		const std::map<const std::string, const ServerBlock *> *_servers_by_host;
 		size_t _eor; // end of last request
 		State _state;
 		Method _method;
@@ -65,6 +65,7 @@ class Client
 		ResponseHandler _response_handler;
 		const LocationBlock *_config;
 
+		void _matchConfig(const std::string &host, const std::string &path);
 		void _sendHeaders(size_t content_length);
 		void _sendErrorResponse(void);
 		void _sendStaticResponse(void);

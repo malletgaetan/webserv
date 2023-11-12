@@ -47,15 +47,15 @@ class Server
 {
 	private:
 		std::map<int, Client *> _clients;
-		std::vector<int> _server_fds;
+		std::pair<int, int> *_servers; // (fd, port)
 		struct sockaddr_in _ssin, _csin;
 		struct epoll_event _ev, *_events;
 		socklen_t _socklen;
 		int	_epfd;
 		bool _running;
 		void _handleTimeouts(void);
-		void _replaceClientEvents(int clientfd, uint32_t op);
-		void _acceptClient(int fd, int port);
+		void _replaceClientEvents(Client *c, uint32_t op);
+		void _acceptClient(std::pair<int, int> *server);
 		void _removeClient(Client *client);
 		void _eventLoop(void);
 	public:

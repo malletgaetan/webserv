@@ -58,11 +58,14 @@ std::pair<size_t, const LocationBlock *> LocationBlock::matchLocation(const std:
 			if (path.size() == index + it->first.size()) // total match
 				return std::pair<size_t, const LocationBlock *>(index + it->first.size(), &(it->second));
 			std::pair<size_t, const LocationBlock *> tmp = it->second.matchLocation(path, index + it->first.size() - (int)(it->first.size() == 1));
-			if (tmp.first > ret.first) {
-				ret = tmp;
-				if (ret.first == path.size())
-					return ret;
-			}
+			ret = tmp;
+			if (ret.first == path.size())
+				return ret;
+			/* if (tmp.first > ret.first) { */
+			/* 	ret = tmp; */
+			/* 	if (ret.first == path.size()) */
+			/* 		return ret; */
+			/* } */
 
 		}
 	}
@@ -71,6 +74,11 @@ std::pair<size_t, const LocationBlock *> LocationBlock::matchLocation(const std:
 
 const std::string LocationBlock::getFilepath(const std::string &path) const
 {
+	if (path == _location) {
+		std::cout << path << " == " << _location << std::endl;
+		return join_path(_root, _index_str);
+	}
+	std::cout << path << " != " << _location << std::endl;
 	return join_path(_root, path.substr(_location.size(), path.size() - _location.size()));
 }
 
