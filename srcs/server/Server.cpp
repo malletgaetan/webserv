@@ -1,6 +1,8 @@
 #include "config/Config.hpp"
 #include "server/Server.hpp"
 #include "config/LocationBlock.hpp"
+#include <cstring>  // For strerror
+#include <cerrno>   // For errno
 
 // PUBLIC
 
@@ -11,23 +13,25 @@ Server::Server(): _socklen(sizeof(struct sockaddr_in)), _epfd(0), _running(false
 
 Server::~Server(void)
 {
+	delete []_events;
 }
 
 void Server::stop(void)
 {
+	return ;
 	Client *c;
 	std::map<int, Client *>::iterator iter = _clients.begin();
 
-	// close epoll
+	close epoll
 	if (_epfd)
 		close(_epfd);
 
-	// close servers
+	close servers
 	for (size_t i = 0; i < _server_fds.size(); i++) {
 		close(_server_fds[i]);
 	}
 
-	// close clients
+	close clients
 	while (iter != _clients.end()) {
 		c = iter->second;
 		++iter;
@@ -76,8 +80,9 @@ void Server::serve(void)
 		_server_fds.push_back(fd);
 		_ev.data.fd = fd;
 		_ev.data.ptr = &(Config::ports[i]);
+		std::cout << "adding fd " << fd << std::endl;
 		ret = epoll_ctl(_epfd, EPOLL_CTL_ADD, fd, &_ev);
-		if (0 > ret)
+		if (ret != 0)
 			throw std::runtime_error("failed to add tcp socket to epoll");
 	}
 
@@ -102,9 +107,11 @@ void Server::_acceptClient(int fd, int port)
 	Client *c;
 	cfd = accept(fd, (struct sockaddr *)&_csin, &_socklen);
 	if (cfd < 0) {
-		std::cerr << "runtime_error: failed to accept new client" << std::endl;
+		std::cerr << strerror(errno) << std::endl;
+		// std::cerr << "runtime_error: failed to accept new client" << std::endl;
 		return ;
 	}
+	std::cout << "GOOD" << std::endl;
 	c = new Client(cfd, port);
 	_clients.insert(std::make_pair(cfd, c));
 	_ev.events = EPOLLIN;
@@ -164,8 +171,9 @@ void Server::_eventLoop(void)
 		++j;
 		now = std::time(NULL);
         for (int i = 0; i < nfds; i++) {
+			std::cout << "value on file descriptor " << i << ": " << _events[i].data.fd << std::endl;
 			try {
-				if (_events[i].data.ptr >= &(Config::ports[0]) && _events[i].data.ptr <= &(Config::ports[Config::ports.size() - 1])) { // hacky again
+				if ((_events[i].data.ptr >= &(Config::ports[0])) && (_events[i].data.ptr <= &(Config::ports[Config::ports.size() - 1]))) {
 					_acceptClient(_events[i].data.fd, *(int *)_events[i].data.ptr);
 					continue ;
 				}

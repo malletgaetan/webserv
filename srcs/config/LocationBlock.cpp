@@ -54,7 +54,6 @@ std::pair<size_t, const LocationBlock *> LocationBlock::matchLocation(const std:
 	std::pair<size_t, const LocationBlock *> ret = std::pair<size_t, const LocationBlock *>(index, this);
 
 	for (it = _locations.begin(); it != _locations.end(); ++it) {
-		std::cout << "comparing " << path.substr(index, it->first.size()) << " and " << it->first << std::endl;
 		if (it->first.size() == 1 || path.compare(index, it->first.size(), it->first) == 0) {
 			if (path.size() == index + it->first.size()) // total match
 				return std::pair<size_t, const LocationBlock *>(index + it->first.size(), &(it->second));
@@ -169,8 +168,8 @@ void	LocationBlock::_parseRoot(const std::string &line)
 	if (_index == line.size() || !isspace(line[_index]))
 		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
 	_root = _parsePath(line, &is_filepath);
-	if (_root.size() != 0 && _root[_root.size() - 1] == '/')
-		_root = _root.substr(0, _root.size() - 1);
+	if (_root.size() == 0)
+		throw RuntimeError("missing root value at line %zu column %zu", Config::line, _index);
 }
 
 void	LocationBlock::_parseIndex(const std::string &line)

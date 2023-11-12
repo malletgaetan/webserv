@@ -40,11 +40,8 @@ int	main(int argc, char **argv)
 		Config::parseFile(f.configpath);
 		if (f.debug)
 			Config::printConfiguration();
-		const LocationBlock *c = Config::matchConfig(std::string("localhost"), "/boumbou/tatatititutu/pif.html", 8000);
-		c->printConfiguration(0);
-		std::cout << c->getFilepath(std::string("/boumbou/tatatititutu/pif.html")) << std::endl;
-		/* Server s = Server(); */
-		/* s.serve(); */
+		Server s = Server();
+		s.serve();
 	} catch(RuntimeError &e) {
 		std::cerr << "failed to parse configuration: " << e.what() << std::endl;
 	} catch(std::runtime_error &e) {
