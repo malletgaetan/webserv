@@ -11,3 +11,4 @@ std::string generate_tabs(int n);
 bool	is_uripath(char c);
 bool	is_filepath(char c);
 void	complete_filepath(std::string *path);
+std::string join_path(const std::string &a, const std::string b);

@@ -104,7 +104,7 @@ void Client::parseRequest(void)
 		return ;
 	}
 
-	switch (_request_buf[0]) { // bit hacky
+	switch (_request_buf[0]) { // bit hacky and bad
 		case 'G':
 			_method = GET;
 			break;
@@ -142,18 +142,10 @@ void Client::parseRequest(void)
 		return ;
 	}
 
-	_static_filepath = _config->getRoot() + _request_buf.substr(first_space + 1, second_space - first_space - 1);
-	if (_static_filepath.size() == 0) {
-		_http_status = HTTP_BAD_REQUEST;
-		_response_handler = &Client::_sendErrorResponse;
-		_request_buf.erase(0, _eor + 4); // _eor + 4 end characters of HTTP request
-		return ;
-	}
+	_static_filepath = _config->getFilepath(_request_buf.substr(first_space + 1, second_space - first_space - 1));
 	// TODO check if auto_index actived to render folder page
 	// TODO add CGI support
 	// TODO check that answer file is in accepted MIME types Accept header
-	if (_static_filepath[_static_filepath.size() - 1] == '/')
-		_static_filepath = _static_filepath + _config->getIndex();
 	_request_buf.erase(0, _eor + 4); // _eor + 4 end characters of HTTP request
 	_response_handler = &Client::_sendStaticResponse;
 }

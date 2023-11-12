@@ -5,18 +5,13 @@
 
 // PUBLIC
 
-LocationBlock::LocationBlock(void): _depth(1), _index(0), _body_limit(-1), _auto_index(false), _cgi_extension(""), _cgi_path(""), _root(""), _redirection("")
+LocationBlock::LocationBlock(void):  _index(0), _body_limit(0), _auto_index(false)
 {
 }
 
-LocationBlock::LocationBlock(const LocationBlock *b, std::ifstream &f): _index(0), _cgi_extension(""), _cgi_path(""), _redirection("")
+LocationBlock::LocationBlock(const LocationBlock *b, const std::string &location, std::ifstream &f): _index(0), _body_limit(b->_body_limit), _auto_index(b->_auto_index), _root(b->_root), _location(location), _methods(b->_methods)
 {
 	// only these attributes are inherited from parent
-	_root = b->getRoot();
-	_methods = b->getMethods();
-	_body_limit = b->getBodySize();
-	_auto_index = b->getAutoIndex();
-	_depth = b->getDepth() + 1;
 	for (std::string line; std::getline(f, line);) {
 		++Config::line;
 		_index = skip_whitespaces(line, 0);
@@ -35,7 +30,7 @@ LocationBlock::~LocationBlock()
 
 void LocationBlock::printConfiguration(int indentation) const
 {
-	std::cout << generate_tabs(indentation) << "Location {" << std::endl;
+	std::cout << generate_tabs(indentation) << "Location " << _location << " {" << std::endl;
 	_printState(indentation + 1);
 	std::cout << generate_tabs(indentation) << "}" << std::endl;
 }
@@ -53,23 +48,31 @@ const std::string &LocationBlock::getIndex(void) const
 	return _index_str;
 }
 
-std::pair <size_t, const LocationBlock *> LocationBlock::matchLocation(const std::string &path, size_t index) const
+std::pair<size_t, const LocationBlock *> LocationBlock::matchLocation(const std::string &path, size_t index) const
 {
 	std::map<std::string, LocationBlock>::const_iterator it;
 	std::pair<size_t, const LocationBlock *> ret = std::pair<size_t, const LocationBlock *>(index, this);
 
 	for (it = _locations.begin(); it != _locations.end(); ++it) {
-		size_t next_slash = path.find_first_of("/", index + 1);
-		if (it->first.compare(0, next_slash - index, it->first) != 0) // no match
-			continue ;
-		if (path.compare(index, it->first.size(), it->first) == 0) // full match
-			return std::pair<size_t, const LocationBlock *>(path.size(), &(it->second));
-		// partial match
-		std::pair<size_t, const LocationBlock *> p = it->second.matchLocation(path, next_slash);
-		if (p.first == path.size())
-			return p;
+		std::cout << "comparing " << path.substr(index, it->first.size()) << " and " << it->first << std::endl;
+		if (it->first.size() == 1 || path.compare(index, it->first.size(), it->first) == 0) {
+			if (path.size() == index + it->first.size()) // total match
+				return std::pair<size_t, const LocationBlock *>(index + it->first.size(), &(it->second));
+			std::pair<size_t, const LocationBlock *> tmp = it->second.matchLocation(path, index + it->first.size() - (int)(it->first.size() == 1));
+			if (tmp.first > ret.first) {
+				ret = tmp;
+				if (ret.first == path.size())
+					return ret;
+			}
+
+		}
 	}
 	return ret;
+}
+
+const std::string LocationBlock::getFilepath(const std::string &path) const
+{
+	return join_path(_root, path.substr(_location.size(), path.size() - _location.size()));
 }
 
 int LocationBlock::getBodySize(void) const
@@ -90,12 +93,6 @@ const std::string &LocationBlock::getRoot(void) const
 const std::vector<HTTP::Method> &LocationBlock::getMethods(void) const
 {
 	return _methods;
-}
-
-
-int	LocationBlock::getDepth(void) const
-{
-	return _depth;
 }
 
 // PRIVATE
@@ -263,10 +260,11 @@ void	LocationBlock::_parseLocation(const std::string &line, std::ifstream &f)
 	if (_index == line.size() || !isspace(line[_index]))
 		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
 	const std::string location_path = _parsePath(line, &is_uripath);
+	if (location_path[0] != '/')
+		throw RuntimeError("location path should start with a '/' at line %zu column %zu", Config::line, _index);
 	expect_char(line, _index, '{');
-	LocationBlock *ptr = this;
 	// TODO: check if location_path already exist => don't create new LocationBlock, just update the existing one
-	_locations[location_path] = LocationBlock(ptr, f);
+	_locations[location_path] = LocationBlock((LocationBlock *)this, join_path(_location, location_path), f);
 }
 
 void	LocationBlock::_parseRedirection(const std::string &line)
@@ -345,7 +343,7 @@ void	LocationBlock::_loadError(int http_status, const std::string &path)
 
 void LocationBlock::_printState(int indentation) const
 {
-	if (_body_limit != -1)
+	if (_body_limit != 0)
 		std::cout << generate_tabs(indentation) << "body_limit " << _body_limit << std::endl;
 	std::cout << generate_tabs(indentation) << "auto_index " << _auto_index << std::endl;
 	if (_cgi_extension.size() != 0)

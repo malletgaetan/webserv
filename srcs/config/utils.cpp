@@ -56,3 +56,11 @@ bool	is_filepath(char c)
 	return (isalnum(c) || c == '.' || c == '_' || c == '-');
 }
 
+std::string join_path(const std::string &a, const std::string b)
+{
+	if (a.size() && a[a.size() - 1] != '/' && b[0] != '/')
+		return a + '/' + b;
+	if (a.size() && a[a.size() - 1] == '/' && b[0] == '/')
+		return a + b.substr(1, b.size() - 1);
+	return a + b;
+}

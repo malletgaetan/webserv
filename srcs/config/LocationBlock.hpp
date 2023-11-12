@@ -8,7 +8,6 @@
 
 class LocationBlock {
 	protected:
-		int		_depth;
 		size_t	_index;
 
 		int _body_limit;
@@ -18,6 +17,7 @@ class LocationBlock {
 		std::string _root;
 		std::string _redirection;
 		std::string	_index_str;
+		std::string _location;
 		std::vector<HTTP::Method> _methods;
 		std::map<std::string, LocationBlock> _locations;
 		std::map<int, std::string> _errors;
@@ -38,7 +38,7 @@ class LocationBlock {
 		void	_printState(int indentation) const;
 	public:
 		LocationBlock(void);
-		LocationBlock(const LocationBlock *b, std::ifstream &f);
+		LocationBlock(const LocationBlock *b, const std::string &location, std::ifstream &f);
 		~LocationBlock();
 		void printConfiguration(int indentation) const;
 		int getBodySize(void) const;
@@ -47,6 +47,6 @@ class LocationBlock {
 		const std::string &getIndex(void) const;
 		const std::vector<HTTP::Method> &getMethods(void) const;
 		const std::string &getErrorPage(int http_code) const;
-		int	getDepth(void) const;
+		const std::string getFilepath(const std::string &path) const;
 		std::pair<size_t, const LocationBlock *> matchLocation(const std::string &path, size_t index) const;
 };
