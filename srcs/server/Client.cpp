@@ -89,10 +89,10 @@ static std::string extract_host(const std::string &request, size_t eor)
 	return request.substr(host_index, port_index - host_index);
 }
 
-void Client::parseRequest(void)
+// return (CGI fd)
+int Client::parseRequest(void)
 {
-	// TODO: if request isn't HTTP1.1??
-	size_t first_space = _request_buf.find(' '); // TODO: should only parse on current request
+	size_t first_space = _request_buf.find(' ');
 	size_t second_space = _request_buf.find(' ', first_space + 1);
 
 	try {
@@ -125,24 +125,50 @@ void Client::parseRequest(void)
 		_matchConfig(host, path);
 		if (_config->isUnauthorizedMethod(_method))
 			throw RequestParsingException(HTTP_METHOD_NOT_ALLOWED);
-		if (_config->isRedirect()) {
-			_response_handler = &Client::_sendRedirectResponse;
-			return ;
-		}
-		_static_filepath = _config->getFilepath(_request_buf.substr(first_space + 1, second_space - first_space - 1));
-		// TODO check if auto_index actived to render folder page
-		// TODO add CGI support
-		// TODO check that answer file is in accepted MIME types Accept header
-		_request_buf.erase(0, _eor + 4); // _eor + 4 end characters of HTTP request
-		_response_handler = &Client::_sendStaticResponse;
 	} catch (RequestParsingException &e) {
 		_http_status = e.getHttpStatus();
 		_response_handler = &Client::_sendErrorResponse;
 		_request_buf.erase(0, _eor + 4); // _eor + 4 end characters of HTTP request
+		return (0);
 	}
+
+	if (_config->isCGI()) {
+		_response_handler = &Client::_sendCGIResponse;
+		return _prepareCGI();
+	} else if (_config->isRedirect()) {
+		_response_handler = &Client::_sendRedirectResponse;
+	} else {
+		_static_filepath = _config->getFilepath(_request_buf.substr(first_space + 1, second_space - first_space - 1));
+		_response_handler = &Client::_sendStaticResponse;
+	}
+
+	// TODO check if auto_index actived to render folder page
+	// TODO check that answer file is in accepted MIME types Accept header
+	_request_buf.erase(0, _eor + 4); // _eor + 4 end characters of HTTP request
+	return (0);
 }
 
 // PRIVATE
+//
+int Client::_prepareCGI(void)
+{
+	if (pipe(_cgi_pipe) == -1)
+		throw std::runtime_error("failed to create pipe");
+	const std::string request = _request.substr(0, _eor + 4);
+	if (write(_cgi_pipe[1], request.c_str(), request.size()) < 0)
+		throw std::runtime_error("failed to write to pipe");
+	_cgi_pid = fork();
+	if (_cgi_pid == 0) {
+		if (dup2(_cgi_pipe[0], STDIN_FILENO) != 0)
+			exit(0);
+		if (dup2(_cgi_pipe[1], STDOUT_FILENO) != 0)
+			exit(0);
+		execve();
+			// TODO: here
+	}
+	return _cgi_pipe[0];
+}
+
 void Client::_matchConfig(const std::string &host, const std::string &path)
 {
 	const std::map<const std::string, const ServerBlock *>::const_iterator it = _servers_by_host->find(host);
@@ -218,3 +244,12 @@ void Client::_sendRedirectResponse(void)
 	_state = RECEIVING;
 }
 
+void Client::_sendCGIResponse(void)
+{
+	if (_cgi_stream.rdbuf()->in_avail() == 0)
+		return ;
+	send_with_throw(_fd, _cgi_stream.str(), "failed to send CGI to client");
+	if (_cgi_pipe[0] == -1)
+		_state = RECEIVING;
+	_cgi_stream.clear();
+}

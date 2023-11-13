@@ -71,7 +71,11 @@ class Client
 		std::time_t _last_activity;
 		ResponseHandler _response_handler;
 		const LocationBlock *_config;
+		std::stringstream _cgi_stream;
+		int _cgi_pipe[2];
+		int _cgi_pid;
 
+		int _prepareCGI(void);
 		void _matchConfig(const std::string &host, const std::string &path);
 		void _prepareHeaders(std::stringstream &stream, size_t content_length, const std::string &extension);
 		void _sendErrorResponse(void);
