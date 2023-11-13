@@ -7,4 +7,4 @@ extern "C" {
 
 #include <stdexcept>
 
-ssize_t send_with_throw(int sockFd, const void *buf, size_t len, const char * throwMsg);
+ssize_t send_with_throw(int sockFd, const std::string &text, const char *throwMsg);

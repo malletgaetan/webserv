@@ -24,7 +24,6 @@ extern "C" {
 
 enum State {
 	RECEIVING,
-	PARSING,
 	SENDING
 };
 
@@ -67,15 +66,14 @@ class Client
 		size_t _eor; // end of last request
 		State _state;
 		HTTP::Method _method;
-		int _fd, _static_fd, _http_status;
+		int _fd, _http_status;
 		std::string _static_filepath, _request_buf;
 		std::time_t _last_activity;
 		ResponseHandler _response_handler;
 		const LocationBlock *_config;
-		std::stringstream _response_stream;
 
 		void _matchConfig(const std::string &host, const std::string &path);
-		void _sendHeaders(size_t content_length, const std::string &extension);
+		void _prepareHeaders(std::stringstream &stream, size_t content_length, const std::string &extension);
 		void _sendErrorResponse(void);
 		void _sendStaticResponse(void);
 		/* bool _sendCGIResponse(void); */

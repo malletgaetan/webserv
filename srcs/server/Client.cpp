@@ -14,7 +14,6 @@ Client::Client(int fd, const std::map<const std::string, const ServerBlock *> *s
 Client::~Client()
 {
 	close(_fd);
-	close(_static_fd);
 }
 
 State Client::getState(void)
@@ -66,7 +65,7 @@ bool Client::readHandler(void)
 	_eor = _request_buf.find("\r\n\r\n"); // end of HTTP request, can be optimized to start searching from last index search
 	if (_eor == std::string::npos)
 		return false;
-	_state = PARSING;
+	_state = SENDING;
 	return false;
 }
 
@@ -149,61 +148,59 @@ void Client::_matchConfig(const std::string &host, const std::string &path)
 	_config = server->matchLocation(path, 0).second;
 }
 
-void Client::_sendHeaders(size_t content_length, const std::string &extension)
+void Client::_prepareHeaders(std::stringstream &stream, size_t content_length, const std::string &extension)
 {
-	std::ostringstream headers;
-	headers << "HTTP/1.1 " << _http_status << " " << HTTP::status_definition(_http_status) << "\r\n";
-	headers << std::string("Content-Type: ") << HTTP::mime_type(extension) << "\r\n";
-	headers << std::string("Content-Length: ") << content_length << std::string("\r\n\r\n");
-	std::string h = headers.str();
-	send_with_throw(_fd, h.c_str(), h.size(), "failed to send headers to client");
+	stream << "HTTP/1.1 " << _http_status << " " << HTTP::status_definition(_http_status) << "\r\n";
+	stream << std::string("Content-Type: ") << HTTP::mime_type(extension) << "\r\n";
+	stream << std::string("Content-Length: ") << content_length << std::string("\r\n\r\n");
 }
 
 void Client::_sendErrorResponse(void)
 {
 	const std::string &error = _config == NULL ? HTTP::default_error(_http_status) : _config->getErrorPage(_http_status);
-	if (_state != SENDING) {
-		_sendHeaders(error.size(), std::string(".html")); // errors are all html pages, set LocationBlock::parseError() if needed
-		_state = SENDING;
-	}
-	send_with_throw(_fd, error.c_str(), error.size(), "failed to send error headers to client"); // this could be buffered in multi send
-	_state = RECEIVING;
-}
+	std::stringstream header_stream;
 
-static ssize_t get_file_size(int fd)
-{
-	off_t file_size = lseek(fd, 0, SEEK_END);
-    if (file_size == -1)
-		throw std::runtime_error("failed to get size of static file");
-	if (lseek(fd, 0, SEEK_SET) == -1)
-		throw std::runtime_error("failed to get size of static file");
-    return file_size;
+	_prepareHeaders(header_stream, error.size(), std::string(".html"));
+	header_stream << error;
+	send_with_throw(_fd, header_stream.str(), "failed to send error headers to client");
+	_state = RECEIVING;
 }
 
 void Client::_sendStaticResponse(void)
 {
-	if (_state == PARSING) {
-		_static_fd = open(_static_filepath.c_str(), O_RDONLY);
-		if (_static_fd == -1) {
-			_http_status = HTTP_NOT_FOUND;
-			return _sendErrorResponse();
+	std::stringstream file_stream;
+	std::stringstream header_stream;
+	int	fd;
+
+	fd = open(_static_filepath.c_str(), O_RDONLY);
+	if (fd == -1) {
+		_http_status = HTTP_NOT_FOUND;
+		return _sendErrorResponse();
+	}
+	_http_status = HTTP_OK;
+
+	size_t last_p = _static_filepath.find_last_of(".");
+	const std::string mime_type = _static_filepath.substr(last_p, _static_filepath.size() - last_p);
+
+
+	ssize_t ret;
+
+	while ((ret = read(fd, Server::_buf, SERVER_BUFFER_SIZE))) {
+		if (ret < 0) {
+			close(fd);
+			throw std::runtime_error("failed to read data from static file");
 		}
-		_http_status = HTTP_OK;
-		_state = SENDING;
-		size_t last_p = _static_filepath.find_last_of(".");
-		const std::string mime_type = _static_filepath.substr(last_p, _static_filepath.size() - last_p);
-		_sendHeaders(get_file_size(_static_fd), mime_type);
+		if (ret == 0)
+			break ;
+		file_stream.write(Server::_buf, ret);
 	}
-	ssize_t ret = read(_static_fd, Server::_buf, SERVER_BUFFER_SIZE);
-	if (ret == -1)
-		throw std::runtime_error("failed to read data from static file");
-	if (ret == 0) {
-		close(_static_fd); // TODO could cause bug in case of throw, static_fd wouldn't be closed
-		_static_fd = -1;
-		_state = RECEIVING;
-	}
-	Server::_buf[ret] = '\0';
-	send_with_throw(_fd, Server::_buf, ret, "failed to send file data to client");
+	close(fd);
+
+	_prepareHeaders(header_stream, file_stream.str().size(), mime_type);
+	header_stream << file_stream.str();
+
+	send_with_throw(_fd, header_stream.str(), "failed to send file data to client");
+	_state = RECEIVING;
 }
 
 void Client::_sendRedirectResponse(void)

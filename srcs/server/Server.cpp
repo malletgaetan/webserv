@@ -194,8 +194,7 @@ void Server::_eventLoop(void)
 						_replaceClientEvents(client, EPOLLOUT);
 				} else {
 					try {
-						if (client->getState() == PARSING)
-							client->parseRequest(); // parse request and set handler
+						client->parseRequest();
 						client->writeHandler();
 					} catch (std::runtime_error &e) {
 						client->sendInternalServerError();
