@@ -44,6 +44,16 @@ const std::string &LocationBlock::getErrorPage(int http_code) const
 	return it->second;
 }
 
+const std::string &LocationBlock::getRedirection(void) const
+{
+	return _redirection;
+}
+
+bool LocationBlock::isRedirect(void) const
+{
+	return _redirection.size() != 0;
+}
+
 const std::string &LocationBlock::getIndex(void) const
 {
 	return _index_str;
@@ -293,30 +303,19 @@ void	LocationBlock::_parseRedirection(const std::string &line)
 	while (_index < line.size()) {
 		if (line[_index] == ';')
 			break ;
-		if (line[_index] == '.') {
+		if (line[_index] == '.' || line[_index] == '/') {
 			if (sep == false)
 				throw ConfigParsingException("unvalid redirect URL at line %zu column %zu", Config::line, _index);
 			sep = false;
+		} else if (line[_index] == ':') {
+			while (isdigit(line[++_index]))
+				;
+			continue ;
 		} else if (line[_index] < 'a' || line[_index] > 'z') {
 			throw ConfigParsingException("unvalid redirect URL at line %zu column %zu", Config::line, _index);
 		}
-		sep = true;
 		++_index;
-	}
-	if (sep == false)
-		throw ConfigParsingException("unvalid redirect URL at line %zu column %zu", Config::line, _index);
-	while (_index < line.size()) {
-		if (line[_index] == ';')
-			break ;
-		if (line[_index] == '/') {
-			if (sep == false)
-				throw ConfigParsingException("unvalid redirect URL at line %zu column %zu", Config::line, _index);
-			sep = false;
-		} else if (!is_uripath(line[_index])) {
-			throw ConfigParsingException("unvalid redirect URL at line %zu column %zu", Config::line, _index);
-		}
 		sep = true;
-		++_index;
 	}
 	_redirection = line.substr(start_index, _index - start_index);
 	expect_end_of_content(line, _index);

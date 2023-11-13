@@ -125,7 +125,10 @@ void Client::parseRequest(void)
 		_matchConfig(host, path);
 		if (_config->isUnauthorizedMethod(_method))
 			throw RequestParsingException(HTTP_METHOD_NOT_ALLOWED);
-
+		if (_config->isRedirect()) {
+			_response_handler = &Client::_sendRedirectResponse;
+			return ;
+		}
 		_static_filepath = _config->getFilepath(_request_buf.substr(first_space + 1, second_space - first_space - 1));
 		// TODO check if auto_index actived to render folder page
 		// TODO add CGI support
@@ -151,7 +154,10 @@ void Client::_matchConfig(const std::string &host, const std::string &path)
 void Client::_prepareHeaders(std::stringstream &stream, size_t content_length, const std::string &extension)
 {
 	stream << "HTTP/1.1 " << _http_status << " " << HTTP::status_definition(_http_status) << "\r\n";
-	stream << std::string("Content-Type: ") << HTTP::mime_type(extension) << "\r\n";
+	if (_http_status != HTTP_PERMANENT_REDIRECT)
+		stream << std::string("Content-Type: ") << HTTP::mime_type(extension) << "\r\n";
+	else
+		stream << std::string("Location: ") << _config->getRedirection() << "\r\n";
 	stream << std::string("Content-Length: ") << content_length << std::string("\r\n\r\n");
 }
 
@@ -205,6 +211,10 @@ void Client::_sendStaticResponse(void)
 
 void Client::_sendRedirectResponse(void)
 {
-	return ;
+	_http_status = HTTP_PERMANENT_REDIRECT;
+	std::stringstream header_stream;
+	_prepareHeaders(header_stream, 0, std::string());
+	send_with_throw(_fd, header_stream.str(), "failed to send redirect to client");
+	_state = RECEIVING;
 }
 

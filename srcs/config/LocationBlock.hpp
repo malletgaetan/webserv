@@ -43,6 +43,8 @@ class LocationBlock {
 		void printConfiguration(int indentation) const;
 		int getBodySize(void) const;
 		bool getAutoIndex(void) const;
+		bool isRedirect(void) const;
+		const std::string &getRedirection(void) const;
 		const std::string &getRoot(void) const;
 		const std::string &getIndex(void) const;
 		const std::vector<HTTP::Method> &getMethods(void) const;
