@@ -20,7 +20,7 @@ ServerBlock::ServerBlock(std::ifstream &f, int default_port): LocationBlock()
 			while (line[_index] != ';')
 				_ports.push_back(_parseInt(line));
 			if (_ports.back() < 0 || _ports.back() > 65535)
-				throw RuntimeError("invalid range for listen port at line %zu column %zu", Config::line, _index);
+				throw ConfigParsingException("invalid range for listen port at line %zu column %zu", Config::line, _index);
 			expect_end_of_content(line, _index);
 		} else if (line.compare(_index, 11, std::string("server_name")) == 0) {
 			_index += 11;
@@ -29,7 +29,7 @@ ServerBlock::ServerBlock(std::ifstream &f, int default_port): LocationBlock()
 			_parseAttribute(line, f);
 		}
 	}
-	throw RuntimeError("expected '}' but got EOF", Config::line, _index);
+	throw ConfigParsingException("expected '}' but got EOF", Config::line, _index);
 }
 
 ServerBlock::~ServerBlock()
@@ -43,24 +43,24 @@ void	ServerBlock::_parseServerName(const std::string &line)
 	size_t start_index = _index;
 	while (true) {
 		if (_index == line.size())
-			throw RuntimeError("unexpected 'newline' at line %zu column %zu", Config::line, _index);
+			throw ConfigParsingException("unexpected 'newline' at line %zu column %zu", Config::line, _index);
 		if (line[_index] == ';')
 			break ;
 		if (line[_index] <= 'z' && line[_index] >= 'a') {
 			point = true;
 		} else if (line[_index] == '.') {
 			if (point == false) {
-				throw RuntimeError("malformed location path at line %zu column %zu", Config::line, _index);
+				throw ConfigParsingException("malformed location path at line %zu column %zu", Config::line, _index);
 			}
 			point = false;
 		} else {
-			throw RuntimeError("uncompatible character in server_name directive at line %zu column %zu", Config::line, _index);
+			throw ConfigParsingException("uncompatible character in server_name directive at line %zu column %zu", Config::line, _index);
 		}
 		++_index;
 	}
 	_server_name = line.substr(start_index, _index - start_index);
 	if (_server_name.size() == 0)
-		throw RuntimeError("missing server_name value at line %zu", Config::line);
+		throw ConfigParsingException("missing server_name value at line %zu", Config::line);
 }
 
 

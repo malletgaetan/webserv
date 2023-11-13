@@ -28,8 +28,11 @@ extern "C" {
 #define MAX_EVENTS 2048
 #define LISTEN_BACKLOG 10
 #define EPOLL_ROUND_CLEANUP 500 // clients cleanup every X calls to epoll_wait | cleanup every EPOLL_MAX_TIMEOUT * 500 max
-#define CLIENT_TIMEOUT 120 // seconds
+#define CLIENT_TIMEOUT 200 // seconds
 #define EPOLL_MAX_TIMEOUT 1000 // ms
+#ifndef SERVER_BUFFER_SIZE
+# define SERVER_BUFFER_SIZE 1000000 // default to 1 megabyte
+#endif
 
 #if SERVER_BUFFER_SIZE > SSIZE_MAX
 	#error "SERVER_BUFFER_SIZE is too big, should not exceed SSIZE_MAX."
@@ -59,6 +62,7 @@ class Server
 		void _removeClient(Client *client);
 		void _eventLoop(void);
 	public:
+		static char *_buf;
 		Server();
 		~Server();
 		void serve(void);

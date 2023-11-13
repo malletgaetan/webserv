@@ -7,6 +7,7 @@
 
 LocationBlock::LocationBlock(void):  _index(0), _body_limit(0), _auto_index(false)
 {
+	_methods.push_back(HTTP::GET);
 }
 
 LocationBlock::LocationBlock(const LocationBlock *b, const std::string &location, std::ifstream &f): _index(0), _body_limit(b->_body_limit), _auto_index(b->_auto_index), _root(b->_root), _location(location), _methods(b->_methods)
@@ -21,7 +22,7 @@ LocationBlock::LocationBlock(const LocationBlock *b, const std::string &location
 			return ;
 		_parseAttribute(line, f);
 	}
-	throw RuntimeError("expected '}' but got EOF at line %zu", Config::line);
+	throw ConfigParsingException("expected '}' but got EOF at line %zu", Config::line);
 }
 
 LocationBlock::~LocationBlock()
@@ -59,26 +60,25 @@ std::pair<size_t, const LocationBlock *> LocationBlock::matchLocation(const std:
 				return std::pair<size_t, const LocationBlock *>(index + it->first.size(), &(it->second));
 			std::pair<size_t, const LocationBlock *> tmp = it->second.matchLocation(path, index + it->first.size() - (int)(it->first.size() == 1));
 			ret = tmp;
-			if (ret.first == path.size())
-				return ret;
-			/* if (tmp.first > ret.first) { */
-			/* 	ret = tmp; */
-			/* 	if (ret.first == path.size()) */
-			/* 		return ret; */
-			/* } */
-
 		}
 	}
 	return ret;
 }
 
+
+bool LocationBlock::isUnauthorizedMethod(HTTP::Method method) const
+{
+	for (size_t i = 0; i < _methods.size(); ++i) {
+		if (_methods[i] == method)
+			return false;
+	}
+	return true;
+}
+
 const std::string LocationBlock::getFilepath(const std::string &path) const
 {
-	if (path == _location) {
-		std::cout << path << " == " << _location << std::endl;
+	if (path == _location)
 		return join_path(_root, _index_str);
-	}
-	std::cout << path << " != " << _location << std::endl;
 	return join_path(_root, path.substr(_location.size(), path.size() - _location.size()));
 }
 
@@ -136,7 +136,7 @@ void	LocationBlock::_parseAttribute(const std::string &line, std::ifstream &f)
 		_index += 8;
 		_parseLocation(line, f);
 	} else {
-		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
+		throw ConfigParsingException("unrecognized attribute at line %zu", Config::line);
 	}
 }
 
@@ -144,10 +144,10 @@ int	LocationBlock::_parseInt(const std::string &line)
 {
 	int	res = 0;
 	if (_index == line.size() || !isspace(line[_index]))
-		throw RuntimeError("unrecognized attribute at line %zu", Config::line, line[_index]);
+		throw ConfigParsingException("unrecognized attribute at line %zu", Config::line, line[_index]);
 	_index = skip_whitespaces(line, _index);
 	if (!isdigit(line[_index]))
-		throw RuntimeError("expected digit at line %zu column %zu", Config::line, _index);
+		throw ConfigParsingException("expected digit at line %zu column %zu", Config::line, _index);
 	while (_index < line.size() && isdigit(line[_index])) {
 		res *= 10;
 		res += line[_index] - '0';
@@ -159,14 +159,14 @@ int	LocationBlock::_parseInt(const std::string &line)
 void	LocationBlock::_parseBool(const std::string &line, bool *dst)
 {
 	if (_index == line.size() || !isspace(line[_index]))
-		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
+		throw ConfigParsingException("unrecognized attribute at line %zu", Config::line);
 	_index = skip_whitespaces(line, _index);
 	if (line.compare(_index, 4, std::string("true")) == 0) {
 		*dst = true;
 	} else if (line.compare(_index, 5, std::string("false")) == 0) {
 		*dst = false;
 	} else {
-		throw RuntimeError("unrecognized boolean, should be 'false' or 'true' at line %zu column %zu", Config::line, _index);
+		throw ConfigParsingException("unrecognized boolean, should be 'false' or 'true' at line %zu column %zu", Config::line, _index);
 	}
 	expect_end_of_content(line, _index);
 }
@@ -174,16 +174,16 @@ void	LocationBlock::_parseBool(const std::string &line, bool *dst)
 void	LocationBlock::_parseRoot(const std::string &line)
 {
 	if (_index == line.size() || !isspace(line[_index]))
-		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
+		throw ConfigParsingException("unrecognized attribute at line %zu", Config::line);
 	_root = _parsePath(line, &is_filepath);
 	if (_root.size() == 0)
-		throw RuntimeError("missing root value at line %zu column %zu", Config::line, _index);
+		throw ConfigParsingException("missing root value at line %zu column %zu", Config::line, _index);
 }
 
 void	LocationBlock::_parseIndex(const std::string &line)
 {
 	if (_index == line.size() || !isspace(line[_index]))
-		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
+		throw ConfigParsingException("unrecognized attribute at line %zu", Config::line);
 	_index_str = _parsePath(line, &is_filepath);
 	expect_end_of_content(line, _index);
 }
@@ -191,16 +191,16 @@ void	LocationBlock::_parseIndex(const std::string &line)
 void	LocationBlock::_parseCGI(const std::string &line)
 {
 	if (_index == line.size() || !isspace(line[_index]))
-		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
+		throw ConfigParsingException("unrecognized attribute at line %zu", Config::line);
 	_index = skip_whitespaces(line, _index);
 	if (_index == line.size())
-		throw RuntimeError("unexpected 'newline' at line %zu column %zu", Config::line, _index);
+		throw ConfigParsingException("unexpected 'newline' at line %zu column %zu", Config::line, _index);
 	if (line[_index] != '.')
-		throw RuntimeError("cgi should start with '.' at line %zu column %zu", Config::line, _index);
+		throw ConfigParsingException("cgi should start with '.' at line %zu column %zu", Config::line, _index);
 	size_t	start_index = _index++;
 	_index = expect_word_in_range(line, _index, 'a', 'z');
 	if (_index == start_index + 1)
-		throw RuntimeError("cgi should contain letters at line %zu column %zu", Config::line, _index);
+		throw ConfigParsingException("cgi should contain letters at line %zu column %zu", Config::line, _index);
 	_cgi_extension = line.substr(start_index, _index - start_index);
 	_cgi_path = _parsePath(line, &is_filepath);
 	expect_end_of_content(line, _index);
@@ -209,7 +209,8 @@ void	LocationBlock::_parseCGI(const std::string &line)
 void	LocationBlock::_parseMethods(const std::string &line)
 {
 	if (_index == line.size() || !isspace(line[_index]))
-		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
+		throw ConfigParsingException("unrecognized attribute at line %zu", Config::line);
+	_methods.clear();
 	while (_index < line.size()) {
 		_index = skip_whitespaces(line, _index);
 		if (line.compare(_index, 3, "get") == 0) {
@@ -225,37 +226,37 @@ void	LocationBlock::_parseMethods(const std::string &line)
 			_index += 6;
 			_methods.push_back(HTTP::DELETE);
 		} else {
-			throw RuntimeError("unrecognized http method at line %zu column %zu", Config::line, _index);
+			throw ConfigParsingException("unrecognized http method at line %zu column %zu", Config::line, _index);
 		}
 		if (line[_index] == ';')
 			return ;
 		if (!isspace(line[_index]))
-			throw RuntimeError("methods should be separated by spaces at line %zu column %zu", Config::line, _index);
+			throw ConfigParsingException("methods should be separated by spaces at line %zu column %zu", Config::line, _index);
 	}
-	throw RuntimeError("exepcted http method at line %zu column %zu", Config::line, _index);
+	throw ConfigParsingException("exepcted http method at line %zu column %zu", Config::line, _index);
 }
 
 std::string LocationBlock::_parsePath(const std::string &line, bool (*is_ok)(char c))
 {
 	if (_index == line.size() || !isspace(line[_index]))
-		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
+		throw ConfigParsingException("unrecognized attribute at line %zu", Config::line);
 	_index = skip_whitespaces(line, _index);
 	bool slash = true;
 	size_t start_index = _index;
 	while (true) {
 		if (_index == line.size())
-			throw RuntimeError("unexpected 'newline' at line %zu column %zu", Config::line, _index);
+			throw ConfigParsingException("unexpected 'newline' at line %zu column %zu", Config::line, _index);
 		if (isspace(line[_index]) || line[_index] == ';')
 			break ;
 		if (is_ok(line[_index])) {
 			slash = true;
 		} else if (line[_index] == '/') {
 			if (slash == false) {
-				throw RuntimeError("malformed location path at line %zu column %zu", Config::line, _index);
+				throw ConfigParsingException("malformed location path at line %zu column %zu", Config::line, _index);
 			}
 			slash = false;
 		} else {
-			throw RuntimeError("illegal character '%c' at line %zu column %zu", line[_index], Config::line, _index);
+			throw ConfigParsingException("illegal character '%c' at line %zu column %zu", line[_index], Config::line, _index);
 		}
 		++_index;
 	}
@@ -265,19 +266,20 @@ std::string LocationBlock::_parsePath(const std::string &line, bool (*is_ok)(cha
 void	LocationBlock::_parseLocation(const std::string &line, std::ifstream &f)
 {
 	if (_index == line.size() || !isspace(line[_index]))
-		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
+		throw ConfigParsingException("unrecognized attribute at line %zu", Config::line);
 	const std::string location_path = _parsePath(line, &is_uripath);
 	if (location_path[0] != '/')
-		throw RuntimeError("location path should start with a '/' at line %zu column %zu", Config::line, _index);
+		throw ConfigParsingException("location path should start with a '/' at line %zu column %zu", Config::line, _index);
 	expect_char(line, _index, '{');
-	// TODO: check if location_path already exist => don't create new LocationBlock, just update the existing one
+	if (_locations.find(location_path) != _locations.end())
+		throw ConfigParsingException("non-unique location path detected at line %zu", Config::line);
 	_locations[location_path] = LocationBlock((LocationBlock *)this, join_path(_location, location_path), f);
 }
 
 void	LocationBlock::_parseRedirection(const std::string &line)
 {
 	if (_index == line.size() || !isspace(line[_index]))
-		throw RuntimeError("unrecognized attribute at line %zu", Config::line);
+		throw ConfigParsingException("unrecognized attribute at line %zu", Config::line);
 	_index = skip_whitespaces(line, _index);
 	size_t start_index = _index;
 	if (line.compare(_index, 8, "https://") == 0) {
@@ -285,7 +287,7 @@ void	LocationBlock::_parseRedirection(const std::string &line)
 	} else if (line.compare(_index, 7, "http://") == 0) {
 		_index += 7;
 	} else {
-		throw RuntimeError("redirection url should start with 'https:// or 'http://' at line %zu column %zu", Config::line, _index);
+		throw ConfigParsingException("redirection url should start with 'https:// or 'http://' at line %zu column %zu", Config::line, _index);
 	}
 	bool sep = false;
 	while (_index < line.size()) {
@@ -293,25 +295,25 @@ void	LocationBlock::_parseRedirection(const std::string &line)
 			break ;
 		if (line[_index] == '.') {
 			if (sep == false)
-				throw RuntimeError("unvalid redirect URL at line %zu column %zu", Config::line, _index);
+				throw ConfigParsingException("unvalid redirect URL at line %zu column %zu", Config::line, _index);
 			sep = false;
 		} else if (line[_index] < 'a' || line[_index] > 'z') {
-			throw RuntimeError("unvalid redirect URL at line %zu column %zu", Config::line, _index);
+			throw ConfigParsingException("unvalid redirect URL at line %zu column %zu", Config::line, _index);
 		}
 		sep = true;
 		++_index;
 	}
 	if (sep == false)
-		throw RuntimeError("unvalid redirect URL at line %zu column %zu", Config::line, _index);
+		throw ConfigParsingException("unvalid redirect URL at line %zu column %zu", Config::line, _index);
 	while (_index < line.size()) {
 		if (line[_index] == ';')
 			break ;
 		if (line[_index] == '/') {
 			if (sep == false)
-				throw RuntimeError("unvalid redirect URL at line %zu column %zu", Config::line, _index);
+				throw ConfigParsingException("unvalid redirect URL at line %zu column %zu", Config::line, _index);
 			sep = false;
 		} else if (!is_uripath(line[_index])) {
-			throw RuntimeError("unvalid redirect URL at line %zu column %zu", Config::line, _index);
+			throw ConfigParsingException("unvalid redirect URL at line %zu column %zu", Config::line, _index);
 		}
 		sep = true;
 		++_index;
@@ -324,12 +326,12 @@ void	LocationBlock::_parseError(const std::string &line)
 {
 	int http_error = _parseInt(line);
 	if (_index == line.size() || !isspace(line[_index]))
-		throw RuntimeError("expected filepath after error code at line %zu column %zu", Config::line, _index);
+		throw ConfigParsingException("expected filepath after error code at line %zu column %zu", Config::line, _index);
 	std::string errorpath = _parsePath(line, &is_filepath);
 	if (errorpath.size() < 6)
-		throw RuntimeError("invalid filepath for error code at line %zu column %zu", Config::line, _index);
+		throw ConfigParsingException("invalid filepath for error code at line %zu column %zu", Config::line, _index);
 	if (errorpath.substr(errorpath.size() - 5) != ".html") // TODO: maybe this is a dumb rule, could be easily removed
-		throw RuntimeError("invalid file for error code, should be html, at line %zu column %zu", Config::line, _index);
+		throw ConfigParsingException("invalid file for error code, should be html, at line %zu column %zu", Config::line, _index);
 	expect_end_of_content(line, _index);
 	_loadError(http_error, errorpath);
 }
@@ -339,7 +341,7 @@ void	LocationBlock::_loadError(int http_status, const std::string &path)
 	std::ifstream file(path.c_str());
     std::string content;
     if (!file)
-		throw RuntimeError("failed to open error page %s at line %zu", path.c_str(), Config::line);
+		throw ConfigParsingException("failed to open error page %s at line %zu", path.c_str(), Config::line);
 	file.seekg(0, std::ios::end);
 	content.resize(file.tellg());
 	file.seekg(0, std::ios::beg);

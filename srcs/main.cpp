@@ -1,7 +1,7 @@
 #include <iostream>
 #include "config/Config.hpp"
 #include "server/Server.hpp"
-#include "RuntimeError.hpp"
+#include "config/ConfigParsingException.hpp"
 #include "http.hpp"
 
 struct args {
@@ -35,14 +35,14 @@ int	main(int argc, char **argv)
 		std::cout << "\t-d debug mode" << std::endl;
 		return (0);
 	}
-	HTTP::init_errors();
+	HTTP::init_maps();
 	try {
 		Config::parseFile(f.configpath);
 		if (f.debug)
 			Config::printConfiguration();
 		Server s = Server();
 		s.serve();
-	} catch(RuntimeError &e) {
+	} catch(ConfigParsingException &e) {
 		std::cerr << "failed to parse configuration: " << e.what() << std::endl;
 	} catch(std::runtime_error &e) {
 		std::cerr << "runtime_error: " << e.what() << std::endl;

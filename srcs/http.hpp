@@ -17,7 +17,8 @@ namespace HTTP {
 		POST,
 		DELETE
 	};
-	void  init_errors(void);
+	void  init_maps(void);
 	const std::string &default_error(int http_status);
 	const std::string &status_definition(int http_status);
+	const std::string &mime_type(const std::string &format);
 }

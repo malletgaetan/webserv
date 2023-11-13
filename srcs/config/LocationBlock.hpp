@@ -48,5 +48,6 @@ class LocationBlock {
 		const std::vector<HTTP::Method> &getMethods(void) const;
 		const std::string &getErrorPage(int http_code) const;
 		const std::string getFilepath(const std::string &path) const;
+		bool isUnauthorizedMethod(HTTP::Method method) const;
 		std::pair<size_t, const LocationBlock *> matchLocation(const std::string &path, size_t index) const;
 };

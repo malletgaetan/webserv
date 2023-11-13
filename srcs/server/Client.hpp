@@ -20,10 +20,7 @@ extern "C" {
 #include <ctime>
 
 #include "config/LocationBlock.hpp"
-
-#ifndef CLIENT_BUFFER_SIZE
-# define CLIENT_BUFFER_SIZE 1000000 // default to 1 megabyte
-#endif
+#include "server/Client.hpp"
 
 enum State {
 	RECEIVING,
@@ -31,11 +28,22 @@ enum State {
 	SENDING
 };
 
-enum Method {
-	GET,
-	HEAD,
-	POST,
-	DELETE
+class RequestParsingException : public std::exception {
+	public:
+		RequestParsingException(int http_status)
+		{
+			_http_status = http_status;
+		}
+		virtual const char* what() const throw()
+		{
+			return "";
+		}
+		int getHttpStatus(void)
+		{
+			return _http_status;
+		}
+	private:
+		int _http_status;
 };
 
 class Client
@@ -58,15 +66,16 @@ class Client
 		const std::map<const std::string, const ServerBlock *> *_servers_by_host;
 		size_t _eor; // end of last request
 		State _state;
-		Method _method;
+		HTTP::Method _method;
 		int _fd, _static_fd, _http_status;
 		std::string _static_filepath, _request_buf;
 		std::time_t _last_activity;
 		ResponseHandler _response_handler;
 		const LocationBlock *_config;
+		std::stringstream _response_stream;
 
 		void _matchConfig(const std::string &host, const std::string &path);
-		void _sendHeaders(size_t content_length);
+		void _sendHeaders(size_t content_length, const std::string &extension);
 		void _sendErrorResponse(void);
 		void _sendStaticResponse(void);
 		/* bool _sendCGIResponse(void); */

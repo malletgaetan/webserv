@@ -7,7 +7,7 @@
 
 #include "config/utils.hpp"
 #include "config/ServerBlock.hpp"
-#include "RuntimeError.hpp"
+#include "config/ConfigParsingException.hpp"
 
 int get_num_cpu_cores(void);
 
@@ -38,12 +38,14 @@ class Config {
 						_ordered_servers[*it][_servers.back().getHost()] = &_servers.back();
 					}
 				} else {
-					throw RuntimeError("unrecognized attribute at line %zu column %zu", Config::line, index);
+					throw ConfigParsingException("unrecognized attribute at line %zu column %zu", Config::line, index);
 				}
 			}
 			// TODO: this could be implemented an other way
 			for (std::map<int, std::map<const std::string, const ServerBlock *> >::const_iterator it = _ordered_servers.begin(); it != _ordered_servers.end(); ++it)
 				ports.push_back(it->first);
+			if (_servers.size() == 0)
+				throw ConfigParsingException("empty configuration or invalid configuration, locations should be in a server block");
 		}
 		static void printConfiguration(void)
 		{

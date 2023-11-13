@@ -7,9 +7,9 @@
 
 
 // TODO make it subject compliant (no v_start / vsnprintf can be used)
-class RuntimeError : public std::exception {
+class ConfigParsingException: public std::exception {
 public:
-    RuntimeError(const char* format, ...) {
+    ConfigParsingException(const char* format, ...) {
         va_list args;
         va_start(args, format);
         vsnprintf(NULL, 0, format, args);
@@ -30,7 +30,7 @@ public:
         return errorMessage;
     }
 
-    virtual ~RuntimeError() throw() {
+    virtual ~ConfigParsingException() throw() {
         free(errorMessage);
     }
 

@@ -6,14 +6,22 @@
 
 // PUBLIC
 
+char *Server::_buf = NULL;
+
 Server::Server(): _socklen(sizeof(struct sockaddr_in)), _epfd(0), _running(false)
 {
 	_events = new struct epoll_event[MAX_EVENTS];
+	if (Server::_buf == NULL)
+		Server::_buf = new char[SERVER_BUFFER_SIZE];
 }
 
 Server::~Server(void)
 {
 	delete []_events;
+	if (Server::_buf != NULL) {
+		delete []Server::_buf;
+		Server::_buf = NULL;
+	}
 }
 
 void Server::stop(void)
@@ -149,6 +157,7 @@ void Server::_handleTimeouts(void)
 	}
 }
 
+// TODO: add a logger
 void Server::_eventLoop(void)
 {
 	Client *client;
@@ -175,12 +184,15 @@ void Server::_eventLoop(void)
 				}
 				client = (Client *)_events[i].data.ptr;
 				client->setLastActivity(now);
-				if (_events[i].events & EPOLLIN) {
+				if (_events[i].events & (EPOLLRDHUP | EPOLLERR)) {
+					// EPOLLERR | EPOLLRDHUP
+					_removeClient(client);
+				} else if (_events[i].events & EPOLLIN) {
 					if (client->readHandler())
 						_removeClient(client);
 					if (client->getState() != RECEIVING) // changed state
 						_replaceClientEvents(client, EPOLLOUT);
-				} else if (_events[i].events & EPOLLOUT) {
+				} else {
 					try {
 						if (client->getState() == PARSING)
 							client->parseRequest(); // parse request and set handler
@@ -190,9 +202,6 @@ void Server::_eventLoop(void)
 					}
 					if (client->getState() != SENDING) // changed state
 						_replaceClientEvents(client, EPOLLIN);
-				} else {
-					// EPOLLERR | EPOLLRDHUP
-					_removeClient(client);
 				}
 			} catch (std::runtime_error &e) {
 				std::cerr << "runtime_error: " << e.what() << std::endl;
