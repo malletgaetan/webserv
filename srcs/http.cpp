@@ -186,6 +186,17 @@ namespace HTTP {
 			"</html>";
 		errors[HTTP_METHOD_NOT_ALLOWED] = methodNotAllowed;
 		definitions[HTTP_METHOD_NOT_ALLOWED] = "Method Not Allowed";
+
+		errors[HTTP_GATEWAY_TIMEOUT] = "<html>"
+			"<head>"
+				"<title>504 Gateway</title>"
+			"</head>"
+			"<body>"
+				"<h1>Gateway timeout</h1>"
+			"</body>"
+			"</html>";
+;
+		definitions[HTTP_GATEWAY_TIMEOUT] = "Gateway Timeout";
 	}
 
 	const std::string &default_error(int http_status)

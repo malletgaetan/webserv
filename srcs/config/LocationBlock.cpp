@@ -46,6 +46,8 @@ bool LocationBlock::isCGI(const std::string &str) const
 	if (_cgi_extension.size() == 0)
 		return false;
 	size_t last_point = str.find_last_of('.');
+	if (last_point == std::string::npos)
+		return false;
 	return ((_cgi_extension.size() == str.size() - last_point) && (str.compare(last_point, str.size() - last_point, _cgi_extension) == 0));
 }
 

@@ -69,7 +69,7 @@ class Client
 		int parseRequest(void);
 		bool isCGI(void) const;
 		bool CGIHandler(void);
-		bool stopCGI(void);
+		void stopCGI(void);
 		int getCGIPipe(void) const;
 	private:
 	    typedef void (Client::*ResponseHandler)(void);

@@ -79,7 +79,7 @@ void Server::serve(void)
     _epfd = epoll_create1(0);
 	if (_epfd < 0)
 		throw std::runtime_error("failed to create epoll");
-	_ev.events = EPOLLIN | EPOLLRDHUP | EPOLLERR; // EPOLLERR is default but usefull for readers
+	_ev.events = EPOLLIN;
 
 	_servers = new std::pair<int, int>[Config::ports.size()];
 
@@ -102,7 +102,7 @@ void Server::serve(void)
 
 void Server::_replaceClientEvents(Client *c, uint32_t op)
 {
-    _ev.events = op | EPOLLRDHUP | EPOLLERR; // EPOLLERR is default but usefull for readers
+    _ev.events = op;
 	_ev.data.ptr = c;
     int ret = epoll_ctl(_epfd, EPOLL_CTL_MOD, c->getFd(), &_ev);
 	if (ret < 0)
@@ -111,7 +111,7 @@ void Server::_replaceClientEvents(Client *c, uint32_t op)
 
 void Server::_addCGI(Client *c, int pipe)
 {
-    _ev.events = EPOLLIN | EPOLLRDHUP | EPOLLERR; // EPOLLERR is default but usefull for readers
+    _ev.events = EPOLLIN;
 	_ev.data.ptr = c;
     int ret = epoll_ctl(_epfd, EPOLL_CTL_ADD, pipe, &_ev);
 	if (ret < 0)
@@ -120,8 +120,6 @@ void Server::_addCGI(Client *c, int pipe)
 
 void Server::_removeCGI(Client *c)
 {
-	if (c->stopCGI())
-		return ;
 	int ret = epoll_ctl(_epfd, EPOLL_CTL_DEL, c->getCGIPipe(), NULL);
 	if (ret < 0)
 		throw std::runtime_error("failed to remove CGI from epoll");
@@ -138,7 +136,7 @@ void Server::_acceptClient(std::pair<int, int> *server)
 	}
 	c = new Client(cfd, Config::getServers(server->second));
 	_clients.insert(std::make_pair(cfd, c));
-	_ev.events = EPOLLIN | EPOLLRDHUP | EPOLLERR; // EPOLLERR is default but usefull for readers
+	_ev.events = EPOLLIN;
 	_ev.data.ptr = c;
 	ret = epoll_ctl(_epfd, EPOLL_CTL_ADD, cfd, &_ev);
 	if (ret < 0) {
@@ -151,7 +149,7 @@ void Server::_removeClient(Client *client)
 {
 	int ret = epoll_ctl(_epfd, EPOLL_CTL_DEL, client->getFd(), NULL);
 	if (ret < 0)
-		throw std::runtime_error("failed to add new client to epoll pool");
+		throw std::runtime_error("failed to remove client from epoll pool");
 	if (client->isCGI())
 		_removeCGI(client);
 	_clients.erase(client->getFd());
@@ -194,6 +192,8 @@ void Server::_eventLoop(void)
 				return ;
 			throw std::runtime_error("failed to retrieve events from epoll");
 		}
+
+		std::cout << "NFDS = " << nfds << std::endl;
 		++j;
 		now = std::time(NULL);
         for (int i = 0; i < nfds; i++) {
@@ -204,13 +204,8 @@ void Server::_eventLoop(void)
 				}
 				client = (Client *)_events[i].data.ptr;
 				client->setLastActivity(now);
-				if (_events[i].events & (EPOLLRDHUP | EPOLLERR)) {
-					// EPOLLERR | EPOLLRDHUP
-					if (client->isCGI()) // TODO: think a bit about this
-						_removeCGI(client);
-					else
-						_removeClient(client);
-				} else if (_events[i].events & EPOLLIN) {
+				if (_events[i].events & EPOLLIN) {
+					std::cout << "EPOLLIN" << std::endl;
 					try {
 						if (client->isCGI()) {
 							if (client->CGIHandler())
@@ -229,15 +224,22 @@ void Server::_eventLoop(void)
 						client->sendInternalServerError();
 						_removeClient(client);
 					}
-				} else {
+				} else if (_events[i].events & EPOLLOUT) {
+					std::cout << "EPOLLOUT" << std::endl;
 					try {
 						client->writeHandler();
 					} catch (std::runtime_error &e) {
+						std::cout << "internalServerError" << std::endl;
 						client->sendInternalServerError();
 						_removeClient(client);
 					}
-					if (client->getState() != SENDING) // changed state
+					if (client->getState() != SENDING) { // changed state
+						std::cout << "replaceClientEvents" << std::endl;
 						_replaceClientEvents(client, EPOLLIN);
+					}
+				} else {
+					std::cout << _events[i].events << std::endl;
+					_removeClient(client);
 				}
 			} catch (std::runtime_error &e) {
 				std::cerr << "runtime_error: " << e.what() << std::endl;
@@ -250,4 +252,3 @@ void Server::_eventLoop(void)
 		}
     }
 }
-

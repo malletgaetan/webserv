@@ -87,26 +87,11 @@ void Client::writeHandler(void)
 	(this->*_response_handler)();
 }
 
-
-// return whether inverse of "stopped CGI"
-bool Client::stopCGI(void)
+void Client::stopCGI(void)
 {
-	if (_cgi_state != RW)
-		return true;
-	int wstatus;
-
-	waitpid(_cgi_pid, &wstatus, 0); // is it usefull? kernel would collect
-	if (WIFEXITED(wstatus)) {
-		if (WEXITSTATUS(wstatus) == HTTP_INTERNAL_SERVER_ERROR || WEXITSTATUS(wstatus) == HTTP_NOT_FOUND)
-			_http_status = WEXITSTATUS(wstatus);
-		else
-			_http_status = HTTP_OK;
-	} else {
-		_http_status = HTTP_INTERNAL_SERVER_ERROR;
-	}
-	close(_cgi_pipe[0]); // TODO: handle close?
-	_cgi_state = DONE;
-	return true;
+	kill(_cgi_pid, SIGKILL);
+	waitpid(_cgi_pid, NULL, 0); // is it usefull? kernel would collect
+	_cgi_state = NONE;
 }
 
 bool Client::CGIHandler(void)
@@ -115,8 +100,10 @@ bool Client::CGIHandler(void)
 	ssize_t ret = read(_cgi_pipe[0], Server::_buf, SERVER_BUFFER_SIZE - 1);
 	if (ret < 0)
 		throw std::runtime_error("failed to read from cgi");
-	if (ret == 0)
+	if (ret == 0) {
+		_cgi_state = DONE;
 		return true;
+	}
 	Server::_buf[ret] = '\0';
 	_cgi_stream << Server::_buf;
 	return false;
@@ -181,6 +168,7 @@ int Client::parseRequest(void)
 	}
 	_static_filepath = _config->getFilepath(_request_buf.substr(first_space + 1, second_space - first_space - 1));
 	if (_config->isCGI(_static_filepath)) {
+		std::cout << "isCGI returned true" << std::endl;
 		_response_handler = &Client::_sendCGIResponse;
 		return _prepareCGI();
 	} else if (_config->isRedirect()) {
@@ -261,6 +249,7 @@ void Client::_prepareHeaders(std::stringstream &stream, size_t content_length, c
 
 void Client::_sendErrorResponse(void)
 {
+	std::cout << "sendErrorResponse" << std::endl;
 	const std::string &error = _config == NULL ? HTTP::default_error(_http_status) : _config->getErrorPage(_http_status);
 	std::stringstream header_stream;
 
@@ -321,22 +310,34 @@ void Client::_sendRedirectResponse(void)
 
 void Client::_sendCGIResponse(void)
 {
+	std::cout << "sendCGIResponse" << std::endl;
+	if (_cgi_state == NONE)
+		return ;
+
 	if (std::difftime(_last_activity, _cgi_start) > GATEWAY_TIMEOUT) {
+		std::cout << "kill cgi" << std::endl;
 		stopCGI();
 		_cgi_stream.clear();
 		_http_status = HTTP_GATEWAY_TIMEOUT;
 		_response_handler = &Client::_sendErrorResponse;
 		return ;
 	}
-	if (_cgi_state == DONE) {
-		if (_http_status != HTTP_OK) {
-			_cgi_stream.clear();
-			_response_handler = &Client::_sendErrorResponse;
-			return ;
-		}
+
+	if (_cgi_state == RW)
+		return ;
+
+	int wstatus;
+	waitpid(_cgi_pid, &wstatus, 0);
+	close(_cgi_pipe[0]);
+	if (WEXITSTATUS(wstatus) != HTTP_OK) {
+		_cgi_stream.clear();
+		_http_status = WEXITSTATUS(wstatus);
+		_response_handler = &Client::_sendErrorResponse;
+		return ;
+	} else {
+		_cgi_state = NONE;
 		send_with_throw(_fd, _cgi_stream.str(), "failed to send CGI to client");
 		_cgi_stream.clear();
-		_state = RECEIVING;
-		_cgi_state = NONE;
 	}
+	_state = RECEIVING;
 }
