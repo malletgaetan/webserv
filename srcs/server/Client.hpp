@@ -11,6 +11,7 @@ extern "C" {
 #include <signal.h>
 #include <unistd.h>
 #include <string.h>
+#include <sys/wait.h>
 }
 
 #include <iostream>
@@ -21,6 +22,13 @@ extern "C" {
 
 #include "config/LocationBlock.hpp"
 #include "server/Client.hpp"
+
+
+enum CGIState {
+	NONE,
+	RW,
+	DONE
+};
 
 enum State {
 	RECEIVING,
@@ -58,7 +66,11 @@ class Client
 		void sendInternalServerError(void);
 		bool readHandler(void); // return whether client should be deleted
 		void writeHandler(void);
-		void parseRequest(void);
+		int parseRequest(void);
+		bool isCGI(void) const;
+		bool CGIHandler(void);
+		bool stopCGI(void);
+		int getCGIPipe(void) const;
 	private:
 	    typedef void (Client::*ResponseHandler)(void);
 		static char *_buf;
@@ -71,6 +83,8 @@ class Client
 		std::time_t _last_activity;
 		ResponseHandler _response_handler;
 		const LocationBlock *_config;
+		std::time_t _cgi_start;
+		CGIState _cgi_state;
 		std::stringstream _cgi_stream;
 		int _cgi_pipe[2];
 		int _cgi_pid;
@@ -80,6 +94,6 @@ class Client
 		void _prepareHeaders(std::stringstream &stream, size_t content_length, const std::string &extension);
 		void _sendErrorResponse(void);
 		void _sendStaticResponse(void);
-		/* bool _sendCGIResponse(void); */
+		void _sendCGIResponse(void);
 		void _sendRedirectResponse(void);
 };

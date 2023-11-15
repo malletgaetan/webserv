@@ -33,6 +33,7 @@ extern "C" {
 #ifndef SERVER_BUFFER_SIZE
 # define SERVER_BUFFER_SIZE 1000000 // default to 1 megabyte
 #endif
+#define GATEWAY_TIMEOUT 5 // seconds
 
 #if SERVER_BUFFER_SIZE > SSIZE_MAX
 	#error "SERVER_BUFFER_SIZE is too big, should not exceed SSIZE_MAX."
@@ -61,6 +62,8 @@ class Server
 		void _acceptClient(std::pair<int, int> *server);
 		void _removeClient(Client *client);
 		void _eventLoop(void);
+		void _addCGI(Client *c, int pipe);
+		void _removeCGI(Client *c);
 	public:
 		static char *_buf;
 		Server();

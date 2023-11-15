@@ -36,6 +36,19 @@ void LocationBlock::printConfiguration(int indentation) const
 	std::cout << generate_tabs(indentation) << "}" << std::endl;
 }
 
+const std::string &LocationBlock::getCGIExecutable(void) const
+{
+	return _cgi_path;
+}
+
+bool LocationBlock::isCGI(const std::string &str) const
+{
+	if (_cgi_extension.size() == 0)
+		return false;
+	size_t last_point = str.find_last_of('.');
+	return ((_cgi_extension.size() == str.size() - last_point) && (str.compare(last_point, str.size() - last_point, _cgi_extension) == 0));
+}
+
 const std::string &LocationBlock::getErrorPage(int http_code) const
 {
 	std::map<int, std::string>::const_iterator it = _errors.find(http_code);

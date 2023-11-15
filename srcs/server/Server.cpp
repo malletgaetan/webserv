@@ -109,6 +109,24 @@ void Server::_replaceClientEvents(Client *c, uint32_t op)
 		throw std::runtime_error("failed to modify client event");
 }
 
+void Server::_addCGI(Client *c, int pipe)
+{
+    _ev.events = EPOLLIN | EPOLLRDHUP | EPOLLERR; // EPOLLERR is default but usefull for readers
+	_ev.data.ptr = c;
+    int ret = epoll_ctl(_epfd, EPOLL_CTL_ADD, pipe, &_ev);
+	if (ret < 0)
+		throw std::runtime_error("failed to add CGI to epoll");
+}
+
+void Server::_removeCGI(Client *c)
+{
+	if (c->stopCGI())
+		return ;
+	int ret = epoll_ctl(_epfd, EPOLL_CTL_DEL, c->getCGIPipe(), NULL);
+	if (ret < 0)
+		throw std::runtime_error("failed to remove CGI from epoll");
+}
+
 void Server::_acceptClient(std::pair<int, int> *server)
 {
 	int cfd, ret;
@@ -134,6 +152,8 @@ void Server::_removeClient(Client *client)
 	int ret = epoll_ctl(_epfd, EPOLL_CTL_DEL, client->getFd(), NULL);
 	if (ret < 0)
 		throw std::runtime_error("failed to add new client to epoll pool");
+	if (client->isCGI())
+		_removeCGI(client);
 	_clients.erase(client->getFd());
 	delete client;
 }
@@ -161,7 +181,7 @@ void Server::_handleTimeouts(void)
 void Server::_eventLoop(void)
 {
 	Client *client;
-	int j, nfds;
+	int j, nfds, read_pipe;
 	std::time_t now;
 
 	j = 0;
@@ -186,18 +206,35 @@ void Server::_eventLoop(void)
 				client->setLastActivity(now);
 				if (_events[i].events & (EPOLLRDHUP | EPOLLERR)) {
 					// EPOLLERR | EPOLLRDHUP
-					_removeClient(client);
-				} else if (_events[i].events & EPOLLIN) {
-					if (client->readHandler())
+					if (client->isCGI()) // TODO: think a bit about this
+						_removeCGI(client);
+					else
 						_removeClient(client);
-					if (client->getState() != RECEIVING) // changed state
-						_replaceClientEvents(client, EPOLLOUT);
+				} else if (_events[i].events & EPOLLIN) {
+					try {
+						if (client->isCGI()) {
+							if (client->CGIHandler())
+								_removeCGI(client);
+							continue ;
+						}
+						if (client->readHandler())
+							_removeClient(client);
+						if (client->getState() != RECEIVING) { // changed state
+							read_pipe = client->parseRequest();
+							if (read_pipe != 0)
+								_addCGI(client, read_pipe);
+							_replaceClientEvents(client, EPOLLOUT);
+						}
+					} catch (std::runtime_error &e) {
+						client->sendInternalServerError();
+						_removeClient(client);
+					}
 				} else {
 					try {
-						client->parseRequest();
 						client->writeHandler();
 					} catch (std::runtime_error &e) {
 						client->sendInternalServerError();
+						_removeClient(client);
 					}
 					if (client->getState() != SENDING) // changed state
 						_replaceClientEvents(client, EPOLLIN);

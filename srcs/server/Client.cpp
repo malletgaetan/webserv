@@ -6,13 +6,15 @@
 
 // PUBLIC
 
-Client::Client(int fd, const std::map<const std::string, const ServerBlock *> *servers_by_host): _servers_by_host(servers_by_host), _state(RECEIVING), _fd(fd), _config(NULL)
+Client::Client(int fd, const std::map<const std::string, const ServerBlock *> *servers_by_host): _servers_by_host(servers_by_host), _state(RECEIVING), _fd(fd), _config(NULL), _cgi_state(NONE)
 {
 	_last_activity = std::time(NULL);
 }
 
 Client::~Client()
 {
+	if (_cgi_state == RW)
+		stopCGI();
 	close(_fd);
 }
 
@@ -69,9 +71,55 @@ bool Client::readHandler(void)
 	return false;
 }
 
+
+bool Client::isCGI(void) const
+{
+	return _cgi_state != NONE;
+}
+
+int Client::getCGIPipe(void) const
+{
+	return _cgi_pipe[0];
+}
+
 void Client::writeHandler(void)
 {
 	(this->*_response_handler)();
+}
+
+
+// return whether inverse of "stopped CGI"
+bool Client::stopCGI(void)
+{
+	if (_cgi_state != RW)
+		return true;
+	int wstatus;
+
+	waitpid(_cgi_pid, &wstatus, 0); // is it usefull? kernel would collect
+	if (WIFEXITED(wstatus)) {
+		if (WEXITSTATUS(wstatus) == HTTP_INTERNAL_SERVER_ERROR || WEXITSTATUS(wstatus) == HTTP_NOT_FOUND)
+			_http_status = WEXITSTATUS(wstatus);
+		else
+			_http_status = HTTP_OK;
+	} else {
+		_http_status = HTTP_INTERNAL_SERVER_ERROR;
+	}
+	close(_cgi_pipe[0]); // TODO: handle close?
+	_cgi_state = DONE;
+	return true;
+}
+
+bool Client::CGIHandler(void)
+{
+	// read from process
+	ssize_t ret = read(_cgi_pipe[0], Server::_buf, SERVER_BUFFER_SIZE - 1);
+	if (ret < 0)
+		throw std::runtime_error("failed to read from cgi");
+	if (ret == 0)
+		return true;
+	Server::_buf[ret] = '\0';
+	_cgi_stream << Server::_buf;
+	return false;
 }
 
 static std::string extract_host(const std::string &request, size_t eor)
@@ -85,7 +133,7 @@ static std::string extract_host(const std::string &request, size_t eor)
 	size_t end_of_path = request.find("\r\n", host_index);
 	size_t port_index = request.find(":", host_index);
 	if (port_index == std::string::npos || port_index > eor)
-		return request.substr(host_index, end_of_path - host_index); 
+		return request.substr(host_index, end_of_path - host_index);
 	return request.substr(host_index, port_index - host_index);
 }
 
@@ -131,14 +179,13 @@ int Client::parseRequest(void)
 		_request_buf.erase(0, _eor + 4); // _eor + 4 end characters of HTTP request
 		return (0);
 	}
-
-	if (_config->isCGI()) {
+	_static_filepath = _config->getFilepath(_request_buf.substr(first_space + 1, second_space - first_space - 1));
+	if (_config->isCGI(_static_filepath)) {
 		_response_handler = &Client::_sendCGIResponse;
 		return _prepareCGI();
 	} else if (_config->isRedirect()) {
 		_response_handler = &Client::_sendRedirectResponse;
 	} else {
-		_static_filepath = _config->getFilepath(_request_buf.substr(first_space + 1, second_space - first_space - 1));
 		_response_handler = &Client::_sendStaticResponse;
 	}
 
@@ -149,23 +196,46 @@ int Client::parseRequest(void)
 }
 
 // PRIVATE
-//
 int Client::_prepareCGI(void)
 {
+	int inpipe[2];
+
 	if (pipe(_cgi_pipe) == -1)
 		throw std::runtime_error("failed to create pipe");
-	const std::string request = _request.substr(0, _eor + 4);
-	if (write(_cgi_pipe[1], request.c_str(), request.size()) < 0)
+	if (pipe(inpipe) == -1)
+		throw std::runtime_error("failed to create pipe");
+	const std::string request = _request_buf.substr(0, _eor + 4);
+	_request_buf.erase(0, _eor + 4); // _eor + 4 end characters of HTTP request
+	if (write(inpipe[1], request.c_str(), request.size()) < 0)
 		throw std::runtime_error("failed to write to pipe");
 	_cgi_pid = fork();
 	if (_cgi_pid == 0) {
-		if (dup2(_cgi_pipe[0], STDIN_FILENO) != 0)
-			exit(0);
+		if (close(inpipe[1]) < 0)
+			exit(HTTP_INTERNAL_SERVER_ERROR);
+		if (close(_cgi_pipe[0]) < 0)
+			exit(HTTP_INTERNAL_SERVER_ERROR);
+		if (dup2(inpipe[0], STDIN_FILENO) != 0)
+			exit(HTTP_INTERNAL_SERVER_ERROR);
+		if (close(inpipe[0]))
+			exit(HTTP_INTERNAL_SERVER_ERROR);
 		if (dup2(_cgi_pipe[1], STDOUT_FILENO) != 0)
-			exit(0);
-		execve();
-			// TODO: here
+			exit(HTTP_INTERNAL_SERVER_ERROR);
+		if (close(inpipe[1]))
+			exit(HTTP_INTERNAL_SERVER_ERROR);
+		const char *arr[3];
+		arr[0] = _config->getCGIExecutable().c_str();
+		arr[1] = _static_filepath.c_str();
+		arr[2] = NULL; 
+		execve(arr[0],(char* const*)arr, NULL); // nice cast bro
+		exit(HTTP_NOT_FOUND);
 	}
+	close(inpipe[0]);
+	close(inpipe[1]);
+	close(_cgi_pipe[1]);
+	if (_cgi_pid == -1)
+		throw std::runtime_error("failed to fork cgi");
+	_cgi_state = RW;
+	_cgi_start = _last_activity;
 	return _cgi_pipe[0];
 }
 
@@ -184,6 +254,8 @@ void Client::_prepareHeaders(std::stringstream &stream, size_t content_length, c
 		stream << std::string("Content-Type: ") << HTTP::mime_type(extension) << "\r\n";
 	else
 		stream << std::string("Location: ") << _config->getRedirection() << "\r\n";
+	if (_http_status == HTTP_INTERNAL_SERVER_ERROR) // in case of internal server error, reset connection and client internal state
+		stream << std::string("Connection: close\r\n");
 	stream << std::string("Content-Length: ") << content_length << std::string("\r\n\r\n");
 }
 
@@ -214,10 +286,13 @@ void Client::_sendStaticResponse(void)
 	size_t last_p = _static_filepath.find_last_of(".");
 	const std::string mime_type = _static_filepath.substr(last_p, _static_filepath.size() - last_p);
 
-
 	ssize_t ret;
 
-	while ((ret = read(fd, Server::_buf, SERVER_BUFFER_SIZE))) {
+	// NOTES
+	// 1 - reading everything could be seen as a bad idea, but its the only way to assure that we're sending the number of bytes that we told in header
+	// 2 - with further reflection, we can't assure anything cause of network, it could fail at any point in time in request, so maybe just go back to sending
+	// header and body in separate timing, without buffering files
+	while ((ret = read(fd, Server::_buf, SERVER_BUFFER_SIZE))) { // TODO cache file if performance low, or better manage file descriptors
 		if (ret < 0) {
 			close(fd);
 			throw std::runtime_error("failed to read data from static file");
@@ -246,10 +321,22 @@ void Client::_sendRedirectResponse(void)
 
 void Client::_sendCGIResponse(void)
 {
-	if (_cgi_stream.rdbuf()->in_avail() == 0)
+	if (std::difftime(_last_activity, _cgi_start) > GATEWAY_TIMEOUT) {
+		stopCGI();
+		_cgi_stream.clear();
+		_http_status = HTTP_GATEWAY_TIMEOUT;
+		_response_handler = &Client::_sendErrorResponse;
 		return ;
-	send_with_throw(_fd, _cgi_stream.str(), "failed to send CGI to client");
-	if (_cgi_pipe[0] == -1)
+	}
+	if (_cgi_state == DONE) {
+		if (_http_status != HTTP_OK) {
+			_cgi_stream.clear();
+			_response_handler = &Client::_sendErrorResponse;
+			return ;
+		}
+		send_with_throw(_fd, _cgi_stream.str(), "failed to send CGI to client");
+		_cgi_stream.clear();
 		_state = RECEIVING;
-	_cgi_stream.clear();
+		_cgi_state = NONE;
+	}
 }
