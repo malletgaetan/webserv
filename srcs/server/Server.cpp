@@ -8,7 +8,7 @@
 
 char *Server::_buf = NULL;
 
-Server::Server(): _socklen(sizeof(struct sockaddr_in)), _epfd(0), _running(false)
+Server::Server(): _servers(NULL), _socklen(sizeof(struct sockaddr_in)), _epfd(0), _running(false)
 {
 	_events = new struct epoll_event[MAX_EVENTS];
 	if (Server::_buf == NULL)
@@ -22,6 +22,7 @@ Server::~Server(void)
 		delete []Server::_buf;
 		Server::_buf = NULL;
 	}
+	delete []_servers;
 }
 
 void Server::stop(void)
@@ -105,8 +106,9 @@ void Server::_replaceClientEvents(Client *c, uint32_t op)
     _ev.events = op | EPOLLERR | EPOLLRDHUP;
 	_ev.data.ptr = c;
     int ret = epoll_ctl(_epfd, EPOLL_CTL_MOD, c->getFd(), &_ev);
-	if (ret < 0)
+	if (ret < 0) {
 		throw std::runtime_error("failed to modify client event");
+	}
 }
 
 void Server::_acceptClient(std::pair<int, int> *server)

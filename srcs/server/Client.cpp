@@ -101,13 +101,17 @@ static std::string extract_host(const std::string &request, size_t eor)
 	return request.substr(host_index, port_index - host_index);
 }
 
-static bool is_in_accept(const std::string &filepath, const std::string &request, size_t eor)
+static const std::string &get_mime(const std::string &filepath)
 {
 	size_t last_point = filepath.find_last_of('.');
 	if (last_point == std::string::npos)
 		last_point = filepath.size();
-	const std::string &mime_type = HTTP::mime_type(filepath.substr(last_point, filepath.size() - last_point));
+	return HTTP::mime_type(filepath.substr(last_point, filepath.size() - last_point));
+}
 
+static bool is_in_accept(const std::string &filepath, const std::string &request, size_t eor)
+{
+	const std::string &mime_type = get_mime(filepath);
 	size_t accept_index = request.find("Accept:");
 	if (accept_index == std::string::npos || accept_index > eor)
 		return true;
@@ -160,6 +164,7 @@ void Client::parseRequest(void)
 		_config->printConfiguration(0);
 		if (_config->isUnauthorizedMethod(_method))
 			throw RequestParsingException(HTTP_METHOD_NOT_ALLOWED);		
+		_static_filepath = _config->getFilepath(path);
 	} catch (RequestParsingException &e) {
 		_http_status = e.getHttpStatus();
 		_response_handler = &Client::_sendErrorResponse;
@@ -167,7 +172,6 @@ void Client::parseRequest(void)
 		return ;
 	}
 
-	_static_filepath = _config->getFilepath(_request_buf.substr(first_space + 1, second_space - first_space - 1));
 	if (_config->isCGI(_static_filepath)) {
 		_response_handler = &Client::_sendCGIResponse;
 		_prepareCGI();
@@ -286,9 +290,6 @@ void Client::_sendStaticResponse(void)
 	}
 	_http_status = HTTP_OK;
 
-	size_t last_p = _static_filepath.find_last_of(".");
-	const std::string mime_type = _static_filepath.substr(last_p, _static_filepath.size() - last_p);
-
 	ssize_t ret;
 
 	// NOTES
@@ -306,6 +307,7 @@ void Client::_sendStaticResponse(void)
 	}
 	close(fd);
 
+	const std::string &mime_type = get_mime(_static_filepath);
 	_prepareHeaders(header_stream, file_stream.str().size(), mime_type);
 	header_stream << file_stream.str();
 

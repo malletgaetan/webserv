@@ -33,15 +33,16 @@ class Config {
 					index = expect_char(line, index, '{');
 					index = skip_whitespaces(line, index);
 					_servers.push_back(ServerBlock(fs, default_port));
-					const std::vector<int> &ports = _servers.back().getPorts();
-					for (std::vector<int>::const_iterator it = ports.begin(); it != ports.end(); ++it) {
-						_ordered_servers[*it][_servers.back().getHost()] = &_servers.back();
-					}
 				} else {
 					throw ConfigParsingException("unrecognized attribute at line %zu column %zu", Config::line, index);
 				}
 			}
-			// TODO: this could be implemented an other way
+			for (size_t i = 0; i < _servers.size(); ++i) {
+				const std::vector<int> &p = _servers[i].getPorts();
+				for (size_t j = 0; j < p.size(); j++) {
+					_ordered_servers[p[j]][_servers[i].getHost()] = &_servers[i];
+				}
+			}
 			for (std::map<int, std::map<const std::string, const ServerBlock *> >::const_iterator it = _ordered_servers.begin(); it != _ordered_servers.end(); ++it)
 				ports.push_back(it->first);
 			if (_servers.size() == 0)

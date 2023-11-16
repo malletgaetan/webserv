@@ -1,8 +1,11 @@
 #include <iostream>
+#include <signal.h>
 #include "config/Config.hpp"
 #include "server/Server.hpp"
 #include "config/ConfigParsingException.hpp"
 #include "http.hpp"
+
+Server *g_server;
 
 struct args {
 	bool debug;
@@ -23,6 +26,12 @@ void	set_flags(int argc, char **argv, args *f)
 	}
 }
 
+void sig_handler(int signum)
+{
+	(void)signum;
+	g_server->stop();
+}
+
 int	main(int argc, char **argv)
 {
 	args f;
@@ -40,11 +49,14 @@ int	main(int argc, char **argv)
 		Config::parseFile(f.configpath);
 		if (f.debug)
 			Config::printConfiguration();
-		Server s = Server();
-		s.serve();
+		g_server = new Server();
+		signal(SIGINT, &sig_handler);
+		g_server->serve();
 	} catch(ConfigParsingException &e) {
 		std::cerr << "failed to parse configuration: " << e.what() << std::endl;
 	} catch(std::runtime_error &e) {
 		std::cerr << "runtime_error: " << e.what() << std::endl;
 	}
+	std::cout << "we" << std::endl;
+	delete g_server;
 }
