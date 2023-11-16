@@ -62,8 +62,6 @@ class Server
 		void _acceptClient(std::pair<int, int> *server);
 		void _removeClient(Client *client);
 		void _eventLoop(void);
-		void _addCGI(Client *c, int pipe);
-		void _removeCGI(Client *c);
 	public:
 		static char *_buf;
 		Server();

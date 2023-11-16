@@ -26,8 +26,7 @@ extern "C" {
 
 enum CGIState {
 	NONE,
-	RW,
-	DONE
+	WAIT
 };
 
 enum State {
@@ -66,11 +65,7 @@ class Client
 		void sendInternalServerError(void);
 		bool readHandler(void); // return whether client should be deleted
 		void writeHandler(void);
-		int parseRequest(void);
-		bool isCGI(void) const;
-		bool CGIHandler(void);
-		void stopCGI(void);
-		int getCGIPipe(void) const;
+		void parseRequest(void);
 	private:
 	    typedef void (Client::*ResponseHandler)(void);
 		static char *_buf;
@@ -90,6 +85,7 @@ class Client
 		int _cgi_pid;
 
 		int _prepareCGI(void);
+		void _stopCGI(void);
 		void _matchConfig(const std::string &host, const std::string &path);
 		void _prepareHeaders(std::stringstream &stream, size_t content_length, const std::string &extension);
 		void _sendErrorResponse(void);
