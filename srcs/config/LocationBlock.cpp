@@ -192,8 +192,10 @@ void	LocationBlock::_parseBool(const std::string &line, bool *dst)
 		throw ConfigParsingException("unrecognized attribute at line %zu", Config::line);
 	_index = skip_whitespaces(line, _index);
 	if (line.compare(_index, 4, std::string("true")) == 0) {
+		_index += 4;
 		*dst = true;
 	} else if (line.compare(_index, 5, std::string("false")) == 0) {
+		_index += 5;
 		*dst = false;
 	} else {
 		throw ConfigParsingException("unrecognized boolean, should be 'false' or 'true' at line %zu column %zu", Config::line, _index);
@@ -281,9 +283,8 @@ std::string LocationBlock::_parsePath(const std::string &line, bool (*is_ok)(cha
 		if (is_ok(line[_index])) {
 			slash = true;
 		} else if (line[_index] == '/') {
-			if (slash == false) {
+			if (slash == false)
 				throw ConfigParsingException("malformed location path at line %zu column %zu", Config::line, _index);
-			}
 			slash = false;
 		} else {
 			throw ConfigParsingException("illegal character '%c' at line %zu column %zu", line[_index], Config::line, _index);

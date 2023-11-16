@@ -6,7 +6,7 @@ extern "C" {
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <arpa/inet.h>
-#include <stdio.h>
+#include <dirent.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <unistd.h>
@@ -63,11 +63,11 @@ class Client
 		const std::time_t &getLastActivity(void) const;
 		void sendRequestTimeout(void);
 		void sendInternalServerError(void);
-		bool readHandler(void); // return whether client should be deleted
+		void readHandler(void); // return whether client should be deleted
 		void writeHandler(void);
 		void parseRequest(void);
 	private:
-	    typedef void (Client::*ResponseHandler)(void);
+	    typedef void (Client::*Handler)(void);
 		static char *_buf;
 		const std::map<const std::string, const ServerBlock *> *_servers_by_host;
 		size_t _eor; // end of last request
@@ -76,7 +76,8 @@ class Client
 		int _fd, _http_status;
 		std::string _static_filepath, _request_buf;
 		std::time_t _last_activity;
-		ResponseHandler _response_handler;
+		Handler _response_handler;
+		Handler _read_handler;
 		const LocationBlock *_config;
 		std::time_t _cgi_start;
 		CGIState _cgi_state;
@@ -84,7 +85,10 @@ class Client
 		int _cgi_pipe[2];
 		int _cgi_pid;
 
+		void _setMethod(void);
 		int _prepareCGI(void);
+		void _requestHandler(void);
+		void _bodyHandler(void);
 		void _stopCGI(void);
 		void _matchConfig(const std::string &host, const std::string &path);
 		void _prepareHeaders(std::stringstream &stream, size_t content_length, const std::string &extension);

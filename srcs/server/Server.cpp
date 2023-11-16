@@ -169,14 +169,13 @@ void Server::_eventLoop(void)
 	j = 0;
     while (true)
     {
-        nfds = epoll_wait(_epfd, _events, MAX_EVENTS, EPOLL_MAX_TIMEOUT); // TODO could this bug if wait for extremely long time and double comparaison fail hard?
+        nfds = epoll_wait(_epfd, _events, MAX_EVENTS, EPOLL_MAX_TIMEOUT);
 		if (nfds < 0)
 		{
 			if (_running == false)
 				return ;
 			throw std::runtime_error("failed to retrieve events from epoll");
 		}
-
 		++j;
 		now = std::time(NULL);
         for (int i = 0; i < nfds; i++) {
@@ -187,32 +186,20 @@ void Server::_eventLoop(void)
 				}
 				client = (Client *)_events[i].data.ptr;
 				client->setLastActivity(now);
-				if (_events[i].events & EPOLLIN) {
-					try {
-						if (client->readHandler())
-							_removeClient(client);
-						if (client->getState() != RECEIVING) { // changed state
-							client->parseRequest();
-							_replaceClientEvents(client, EPOLLOUT);
-						}
-					} catch (std::runtime_error &e) {
-						client->sendInternalServerError();
-						_removeClient(client); // reset connection and state in fail case
-					}
-				} else if (_events[i].events & EPOLLOUT) {
-					try {
-						client->writeHandler();
-					} catch (std::runtime_error &e) {
-						client->sendInternalServerError();
-						_removeClient(client); // reset connection and state in fail case
-					}
-					if (client->getState() != SENDING) { // changed state
-						_replaceClientEvents(client, EPOLLIN);
-					}
-				} else {
+				if (_events[i].events & (EPOLLERR | EPOLLRDHUP)) {
 					_removeClient(client); // reset connection and state in fail case
+				} else if (_events[i].events & EPOLLIN) {
+					client->readHandler();
+						_removeClient(client);
+					if (client->getState() != RECEIVING) // changed state
+						_replaceClientEvents(client, EPOLLOUT);
+				} else {
+					client->writeHandler();
+					if (client->getState() != SENDING) // changed state
+						_replaceClientEvents(client, EPOLLIN);
 				}
 			} catch (std::runtime_error &e) {
+				client->sendInternalServerError();
 				_removeClient(client);  // reset connection and state in fail case
 			}
         }

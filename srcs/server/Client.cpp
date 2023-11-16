@@ -9,7 +9,7 @@
 
 // PUBLIC
 
-Client::Client(int fd, const std::map<const std::string, const ServerBlock *> *servers_by_host): _servers_by_host(servers_by_host), _state(RECEIVING), _fd(fd), _config(NULL), _cgi_state(NONE)
+Client::Client(int fd, const std::map<const std::string, const ServerBlock *> *servers_by_host): _servers_by_host(servers_by_host), _state(RECEIVING), _fd(fd), _read_handler(&Client::_requestHandler), _config(NULL), _cgi_state(NONE)
 {
 	_last_activity = std::time(NULL);
 }
@@ -58,20 +58,26 @@ void Client::sendInternalServerError(void)
 	_state = RECEIVING;
 }
 
-bool Client::readHandler(void)
+void Client::readHandler(void)
+{
+	(this->*_read_handler)();
+}
+
+void Client::_bodyHandler(void)
+{
+	return ;
+}
+
+void Client::_requestHandler(void)
 {
 	ssize_t ret = recv(_fd, Server::_buf, SERVER_BUFFER_SIZE - 1, 0);
 	Server::_buf[ret] = '\0';
 	if (ret == -1)
 		throw std::runtime_error("failed to read from client");
-	if (ret == 0)
-		return true;
 	_request_buf.append(Server::_buf);
 	_eor = _request_buf.find("\r\n\r\n"); // end of HTTP request, can be optimized to start searching from last index search
 	if (_eor == std::string::npos)
-		return false;
-	_state = SENDING;
-	return false;
+		parseRequest();
 }
 
 void Client::writeHandler(void)
@@ -128,6 +134,35 @@ static bool is_in_accept(const std::string &filepath, const std::string &request
 	return true;
 }
 
+void Client::_setMethod(void)
+{
+	switch (_request_buf[0]) {
+		case 'G':
+			_method = HTTP::GET;
+			break;
+		case 'P':
+			switch (_request_buf[1]) {
+				case 'U':
+					_method = HTTP::POST;
+					break;
+				case 'O':
+					_method = HTTP::POST;
+					break;
+				default:
+					throw RequestParsingException(HTTP_BAD_REQUEST);
+			}
+			break;
+		case 'H':
+			_method = HTTP::HEAD;
+			break;
+		case 'D':
+			_method = HTTP::DELETE;
+			break;
+		default:
+			throw RequestParsingException(HTTP_BAD_REQUEST);
+	}
+}
+
 void Client::parseRequest(void)
 {
 	size_t first_space = _request_buf.find(' ');
@@ -137,22 +172,7 @@ void Client::parseRequest(void)
 		if (first_space == std::string::npos || second_space == std::string::npos || first_space >= _eor)
 			throw RequestParsingException(HTTP_BAD_REQUEST);
 
-		switch (_request_buf[0]) { // bit hacky and bad
-			case 'G':
-				_method = HTTP::GET;
-				break;
-			case 'P':
-				_method = HTTP::POST;
-				break;
-			case 'H':
-				_method = HTTP::HEAD;
-				break;
-			case 'D':
-				_method = HTTP::DELETE;
-				break;
-			default:
-				throw RequestParsingException(HTTP_BAD_REQUEST);
-		}
+		_setMethod();
 
 		const std::string path = _request_buf.substr(first_space + 1, second_space - first_space - 1);
 		const std::string host = extract_host(_request_buf, _eor);
@@ -161,10 +181,17 @@ void Client::parseRequest(void)
 
 		// match config
 		_matchConfig(host, path);
-		_config->printConfiguration(0);
 		if (_config->isUnauthorizedMethod(_method))
 			throw RequestParsingException(HTTP_METHOD_NOT_ALLOWED);		
 		_static_filepath = _config->getFilepath(path);
+
+		// if is POST or PUT:
+		// need content-length else 411 Length Required
+		// do we already have the data? 
+		// yes -> execute and send Response
+		// no -> readHandler = bodyHandler
+		// _response_handler = sendCreationResponse;
+		// return ;
 	} catch (RequestParsingException &e) {
 		_http_status = e.getHttpStatus();
 		_response_handler = &Client::_sendErrorResponse;
@@ -188,7 +215,6 @@ void Client::parseRequest(void)
 	}
 
 	// TODO check if auto_index actived to render folder page
-	// TODO check that answer file is in accepted MIME types Accept header
 	_request_buf.erase(0, _eor + 4); // _eor + 4 end characters of HTTP request
 }
 
@@ -279,8 +305,10 @@ void Client::_sendErrorResponse(void)
 
 void Client::_sendStaticResponse(void)
 {
-	std::stringstream file_stream;
+	std::stringstream body_stream;
 	std::stringstream header_stream;
+	struct stat file_stat;
+	struct dirent *entry;
 	int	fd;
 
 	fd = open(_static_filepath.c_str(), O_RDONLY);
@@ -288,29 +316,59 @@ void Client::_sendStaticResponse(void)
 		_http_status = HTTP_NOT_FOUND;
 		return _sendErrorResponse();
 	}
+    if (fstat(fd, &file_stat) == -1) {
+		close(fd);
+		_http_status = HTTP_INTERNAL_SERVER_ERROR;
+		return _sendErrorResponse();
+    }
+
+    // Check if the file descriptor corresponds to a directory
 	_http_status = HTTP_OK;
+	if (S_ISDIR(file_stat.st_mode) && !_config->getAutoIndex()) {
+		close(fd);
+		_http_status = HTTP_NOT_FOUND;
+		return _sendErrorResponse();
+	}
+    if (S_ISDIR(file_stat.st_mode)) {
+		// send directory
+		DIR *dir = fdopendir(fd);
 
-	ssize_t ret;
+		if (dir == NULL)
+			throw std::runtime_error("failed to open directory");
 
-	// NOTES
-	// 1 - reading everything could be seen as a bad idea, but its the only way to assure that we're sending the number of bytes that we told in header
-	// 2 - with further reflection, we can't assure anything cause of network, it could fail at any point in time in request, so maybe just go back to sending
-	// header and body in separate timing, without buffering files
-	while ((ret = read(fd, Server::_buf, SERVER_BUFFER_SIZE - 1))) { // TODO cache file if performance low, or better manage file descriptors
-		if (ret < 0) {
-			close(fd);
-			throw std::runtime_error("failed to read data from static file");
+		// Start constructing HTML
+		body_stream << "<html>\n<head>\n<title>Index of Folder</title>\n</head>\n<body>\n";
+		body_stream << "<h1>Index of Folder</h1>\n";
+		body_stream << "<ul>\n";
+
+		// Read directory entries and generate HTML representation
+		while ((entry = readdir(dir)) != NULL) {
+			if (fstatat(fd, entry->d_name, &file_stat, 0) == -1)
+				continue;
+			body_stream << "<li><a href=\"" << entry->d_name << "\">" << entry->d_name << "</a></li>\n";
 		}
-		if (ret == 0)
-			break ;
-		file_stream.write(Server::_buf, ret);
+
+		body_stream << "</ul>\n</body>\n</html>\n";
+    } else {
+		// send file
+		ssize_t ret;
+
+		// keep it simple
+		while ((ret = read(fd, Server::_buf, SERVER_BUFFER_SIZE - 1))) { // TODO cache file if performance low, or better manage file descriptors
+			if (ret < 0) {
+				close(fd);
+				throw std::runtime_error("failed to read data from static file");
+			}
+			if (ret == 0)
+				break ;
+			body_stream.write(Server::_buf, ret);
+		}
 	}
 	close(fd);
 
 	const std::string &mime_type = get_mime(_static_filepath);
-	_prepareHeaders(header_stream, file_stream.str().size(), mime_type);
-	header_stream << file_stream.str();
-
+	_prepareHeaders(header_stream, body_stream.str().size(), mime_type);
+	header_stream << body_stream.str();
 	send_with_throw(_fd, header_stream.str(), "failed to send file data to client");
 	_state = RECEIVING;
 }

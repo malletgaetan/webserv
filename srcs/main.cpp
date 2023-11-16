@@ -57,6 +57,5 @@ int	main(int argc, char **argv)
 	} catch(std::runtime_error &e) {
 		std::cerr << "runtime_error: " << e.what() << std::endl;
 	}
-	std::cout << "we" << std::endl;
 	delete g_server;
 }
