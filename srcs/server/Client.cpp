@@ -101,6 +101,29 @@ static std::string extract_host(const std::string &request, size_t eor)
 	return request.substr(host_index, port_index - host_index);
 }
 
+static bool is_in_accept(const std::string &filepath, const std::string &request, size_t eor)
+{
+	size_t last_point = filepath.find_last_of('.');
+	if (last_point == std::string::npos)
+		last_point = filepath.size();
+	const std::string &mime_type = HTTP::mime_type(filepath.substr(last_point, filepath.size() - last_point));
+
+	size_t accept_index = request.find("Accept:");
+	if (accept_index == std::string::npos || accept_index > eor)
+		return true;
+	accept_index += 7;
+	size_t accept_end = request.find("\r\n", accept_index);
+	if (accept_end == std::string::npos || accept_end > eor)
+		return true;
+	size_t mime = request.find(mime_type, accept_index);
+	if (mime != std::string::npos && mime <= eor)
+		return true;
+	mime = request.find("*/*", accept_index);
+	if (mime == std::string::npos || mime > eor)
+		return false;
+	return true;
+}
+
 void Client::parseRequest(void)
 {
 	size_t first_space = _request_buf.find(' ');
@@ -127,7 +150,6 @@ void Client::parseRequest(void)
 				throw RequestParsingException(HTTP_BAD_REQUEST);
 		}
 
-
 		const std::string path = _request_buf.substr(first_space + 1, second_space - first_space - 1);
 		const std::string host = extract_host(_request_buf, _eor);
 		if (host.size() == 0)
@@ -135,14 +157,16 @@ void Client::parseRequest(void)
 
 		// match config
 		_matchConfig(host, path);
+		_config->printConfiguration(0);
 		if (_config->isUnauthorizedMethod(_method))
-			throw RequestParsingException(HTTP_METHOD_NOT_ALLOWED);
+			throw RequestParsingException(HTTP_METHOD_NOT_ALLOWED);		
 	} catch (RequestParsingException &e) {
 		_http_status = e.getHttpStatus();
 		_response_handler = &Client::_sendErrorResponse;
 		_request_buf.erase(0, _eor + 4); // _eor + 4 end characters of HTTP request
 		return ;
 	}
+
 	_static_filepath = _config->getFilepath(_request_buf.substr(first_space + 1, second_space - first_space - 1));
 	if (_config->isCGI(_static_filepath)) {
 		_response_handler = &Client::_sendCGIResponse;
@@ -151,7 +175,12 @@ void Client::parseRequest(void)
 	} else if (_config->isRedirect()) {
 		_response_handler = &Client::_sendRedirectResponse;
 	} else {
-		_response_handler = &Client::_sendStaticResponse;
+		if (!is_in_accept(_static_filepath, _request_buf, _eor)) {
+			_http_status = HTTP_NOT_ACCEPTABLE;
+			_response_handler = &Client::_sendErrorResponse;
+		} else {
+			_response_handler = &Client::_sendStaticResponse;
+		}
 	}
 
 	// TODO check if auto_index actived to render folder page

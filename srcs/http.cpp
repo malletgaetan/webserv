@@ -187,6 +187,17 @@ namespace HTTP {
 		errors[HTTP_METHOD_NOT_ALLOWED] = methodNotAllowed;
 		definitions[HTTP_METHOD_NOT_ALLOWED] = "Method Not Allowed";
 
+		std::string notAcceptable = "<html>"
+			"<head>"
+				"<title>406 Not Acceptable</title>"
+			"</head>"
+			"<body>"
+				"<h1>406 Not Acceptable</h1>"
+			"</body>"
+			"</html>";
+		errors[HTTP_NOT_ACCEPTABLE] = notAcceptable;
+		definitions[HTTP_NOT_ACCEPTABLE] = "Not Acceptable";
+
 		errors[HTTP_GATEWAY_TIMEOUT] = "<html>"
 			"<head>"
 				"<title>504 Gateway</title>"
