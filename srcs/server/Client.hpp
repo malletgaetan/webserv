@@ -87,7 +87,8 @@ class Client
 		int _cgi_pid;
 		int _body_size;
 
-		bool _createFile(void);
+		void _createFile(void);
+		void _deleteFile(void);
 		void _parseRequest(void);
 		void _setMethod(void);
 		int _prepareCGI(void);

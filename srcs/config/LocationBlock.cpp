@@ -254,9 +254,12 @@ void	LocationBlock::_parseMethods(const std::string &line)
 		} else if (line.compare(_index, 4, "post") == 0) {
 			_index += 4;
 			_methods.push_back(HTTP::POST);
-		} else if (line.compare(_index, 5, "delete") == 0) {
+		} else if (line.compare(_index, 6, "delete") == 0) {
 			_index += 6;
 			_methods.push_back(HTTP::DELETE);
+		} else if (line.compare(_index, 3, "put") == 0) {
+			_index += 3;
+			_methods.push_back(HTTP::PUT);
 		} else {
 			throw ConfigParsingException("unrecognized http method at line %zu column %zu", Config::line, _index);
 		}
@@ -393,6 +396,8 @@ void LocationBlock::_printState(int indentation) const
 				std::cout << "POST";
 			} else if (_methods[i] == HTTP::DELETE) {
 				std::cout << "DELETE";
+			} else if (_methods[i] == HTTP::PUT){
+				std::cout << "PUT";
 			} else {
 				std::cout << "HEAD";
 			}

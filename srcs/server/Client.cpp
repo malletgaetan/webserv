@@ -71,8 +71,7 @@ void Client::_bodyHandler(void)
 	Server::_buf[ret] = '\0';
 	_request_buf.append(Server::_buf);
 	if ((size_t)_body_size <= _request_buf.size()) {
-		if (_createFile())
-			throw RequestParsingException(HTTP_INTERNAL_SERVER_ERROR);
+		_createFile();
 		_response_handler = &Client::_sendOk;
 		_read_handler = &Client::_requestHandler;
 		_state = ANSWER;
@@ -246,7 +245,19 @@ void Client::_parseRequest(void)
 		return ;
 	}
 
-	if (_method == HTTP::POST || _method == HTTP::PUT) {
+	if (_method == HTTP::DELETE) {
+		if (_static_filepath[_static_filepath.size() - 1] == '/')
+			throw RequestParsingException(HTTP_METHOD_NOT_ALLOWED);
+		_deleteFile();
+		_response_handler = &Client::_sendOk;
+	} else if (_method == HTTP::GET || _method == HTTP::HEAD) {
+		if (!is_in_accept(_static_filepath, _request_buf, _eor)) {
+			_http_status = HTTP_NOT_ACCEPTABLE;
+			_response_handler = &Client::_sendErrorResponse;
+		} else {
+			_response_handler = &Client::_sendStaticResponse;
+		}
+	} else {
 		// INVESTIGATE: can't upload more that MAX_INT byte
 		if (_static_filepath[_static_filepath.size() - 1] == '/')
 			throw RequestParsingException(HTTP_METHOD_NOT_ALLOWED);
@@ -263,31 +274,28 @@ void Client::_parseRequest(void)
 		if (_body_size > _config->getBodyLimit())
 			throw RequestParsingException(HTTP_PAYLOAD_TOO_LARGE);
 		if (_request_buf.size() - _eor >= (size_t)_body_size) {
-			if (_createFile())
-				throw RequestParsingException(HTTP_INTERNAL_SERVER_ERROR);
+			_createFile();
 			_response_handler = &Client::_sendOk;
 			return ;
 		}
 		_read_handler = &Client::_bodyHandler;
 		_state = REQUEST_START_WAIT;
-		return ;
-	}
-	if (!is_in_accept(_static_filepath, _request_buf, _eor)) {
-		_http_status = HTTP_NOT_ACCEPTABLE;
-		_response_handler = &Client::_sendErrorResponse;
-	} else {
-		_response_handler = &Client::_sendStaticResponse;
 	}
 }
 
-bool Client::_createFile(void)
+void Client::_deleteFile(void)
+{
+	if (remove(_static_filepath.c_str()) != 0)
+		throw RequestParsingException(HTTP_NOT_FOUND);
+}
+
+void Client::_createFile(void)
 {
 	int fd = open(_static_filepath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
 	if (fd < 0)
-		return true;
+		throw RequestParsingException(HTTP_INTERNAL_SERVER_ERROR);
 	if (write(fd, _request_buf.substr(_eor + 4, _body_size).c_str(), _body_size) < 0) // TODO check that the whole file was written
-		return true;
-	return false;
+		throw RequestParsingException(HTTP_INTERNAL_SERVER_ERROR);
 }
 
 // PRIVATE
