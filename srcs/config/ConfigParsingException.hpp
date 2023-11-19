@@ -1,39 +1,52 @@
 #pragma once
+#include <sstream>
 #include <stdexcept>
 #include <cstdio>
 #include <cstdarg>
 #include <cstdlib>
 #include <cstring>
 
-
-// TODO make it subject compliant (no v_start / vsnprintf can be used)
 class ConfigParsingException: public std::exception {
 public:
-    ConfigParsingException(const char* format, ...) {
+    ConfigParsingException(std::string format, ...)
+    {
+        std::stringstream msg;
         va_list args;
-        va_start(args, format);
-        vsnprintf(NULL, 0, format, args);
-        va_end(args);
 
         va_start(args, format);
-        size_t size = vsnprintf(NULL, 0, format, args) + 1;
-        va_end(args);
+        size_t i = 0;
+        while (true) {
+            size_t next_specifier = format.find("%", i);
 
-        errorMessage = (char*)malloc(size * sizeof(char));
-
-        va_start(args, format);
-        vsnprintf(errorMessage, size, format, args);
+            if (next_specifier == std::string::npos) {
+                msg << format.substr(i, format.size() - i);
+                break ;
+            }
+            msg << format.substr(i, next_specifier - i);
+            if (format[next_specifier + 1] == 'c') {
+                i = next_specifier + 2;
+                msg << (char)va_arg(args, int);
+            } else if (format[next_specifier + 1] == 's') {
+                i = next_specifier + 2;
+                msg << (char *)va_arg(args, char *);
+            } else {
+                i = next_specifier + 3;
+                msg << (size_t)va_arg(args, size_t);
+            }
+        }
         va_end(args);
+        _message = msg.str();
     }
 
-    virtual const char* what() const throw() {
-        return errorMessage;
+    virtual ~ConfigParsingException() throw()
+    {
     }
 
-    virtual ~ConfigParsingException() throw() {
-        free(errorMessage);
+    virtual const char* what() const throw()
+    {
+        return _message.c_str();
     }
 
 private:
-    char* errorMessage;
+    std::string _message;
 };
