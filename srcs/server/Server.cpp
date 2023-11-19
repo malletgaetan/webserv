@@ -190,12 +190,11 @@ void Server::_eventLoop(void)
 					_removeClient(client); // reset connection and state in fail case
 				} else if (_events[i].events & EPOLLIN) {
 					client->readHandler();
-						_removeClient(client);
-					if (client->getState() != RECEIVING) // changed state
+					if (client->getState() == ANSWER) // changed state
 						_replaceClientEvents(client, EPOLLOUT);
 				} else {
 					client->writeHandler();
-					if (client->getState() != SENDING) // changed state
+					if (client->getState() != ANSWER) // changed state
 						_replaceClientEvents(client, EPOLLIN);
 				}
 			} catch (std::runtime_error &e) {

@@ -9,7 +9,7 @@
 
 // PUBLIC
 
-Client::Client(int fd, const std::map<const std::string, const ServerBlock *> *servers_by_host): _servers_by_host(servers_by_host), _state(RECEIVING), _fd(fd), _read_handler(&Client::_requestHandler), _config(NULL), _cgi_state(NONE)
+Client::Client(int fd, const std::map<const std::string, const ServerBlock *> *servers_by_host): _servers_by_host(servers_by_host), _state(REQUEST_START_WAIT), _fd(fd), _read_handler(&Client::_requestHandler), _config(NULL), _cgi_state(NONE)
 {
 	_last_activity = std::time(NULL);
 }
@@ -55,7 +55,7 @@ void Client::sendInternalServerError(void)
 {
 	_http_status = HTTP_INTERNAL_SERVER_ERROR;
 	_sendErrorResponse();
-	_state = RECEIVING;
+	_state = REQUEST_START_WAIT;
 }
 
 void Client::readHandler(void)
@@ -65,19 +65,73 @@ void Client::readHandler(void)
 
 void Client::_bodyHandler(void)
 {
-	return ;
+	ssize_t ret = recv(_fd, Server::_buf, SERVER_BUFFER_SIZE - 1, 0);
+	if (ret == -1)
+		throw std::runtime_error("failed to read body from client");
+	Server::_buf[ret] = '\0';
+	_request_buf.append(Server::_buf);
+	if ((size_t)_body_size <= _request_buf.size()) {
+		if (_createFile())
+			throw RequestParsingException(HTTP_INTERNAL_SERVER_ERROR);
+		_response_handler = &Client::_sendOk;
+		_read_handler = &Client::_requestHandler;
+		_state = ANSWER;
+	}
 }
 
 void Client::_requestHandler(void)
 {
 	ssize_t ret = recv(_fd, Server::_buf, SERVER_BUFFER_SIZE - 1, 0);
-	Server::_buf[ret] = '\0';
 	if (ret == -1)
-		throw std::runtime_error("failed to read from client");
+		throw std::runtime_error("failed to read request from client");
+
+	Server::_buf[ret] = '\0';
 	_request_buf.append(Server::_buf);
+
+	// search for start of request
+	if (_state == REQUEST_START_WAIT) {
+		while (true) {
+			if (_request_buf.size() == 0)
+				return ;
+			size_t request_identifier = _request_buf.find("HTTP/1.1\r\n"); // start of request
+			if (request_identifier == std::string::npos) {
+				_request_buf.clear();
+				return ;
+			}
+			ssize_t sor = request_identifier - 1;  // start of request
+			int nb_space = 0;
+			while (nb_space < 3) {
+				if (sor < 0) {
+					if (nb_space == 2) {
+						++nb_space;
+						break ;
+					}
+					_request_buf.erase(0, request_identifier + 12);
+					break ;
+				}
+				if (isspace(_request_buf[sor]))
+					++nb_space;
+				--sor;
+			}
+			if (nb_space < 3)
+				continue ;
+			if (sor != -1)
+				_request_buf.erase(0, sor);
+			break ;
+		}
+		_state = REQUEST_END_WAIT;
+	}
+	// search for end of request
 	_eor = _request_buf.find("\r\n\r\n"); // end of HTTP request, can be optimized to start searching from last index search
 	if (_eor == std::string::npos)
-		parseRequest();
+		return ;
+	try {
+		_parseRequest();
+	} catch (RequestParsingException &e) {
+		_http_status = e.getHttpStatus();
+		_response_handler = &Client::_sendErrorResponse;
+	}
+	_request_buf.erase(0, _eor + 4);
 }
 
 void Client::writeHandler(void)
@@ -85,26 +139,18 @@ void Client::writeHandler(void)
 	(this->*_response_handler)();
 }
 
-void Client::_stopCGI(void)
+static std::string extract_header_value(const std::string &request, const std::string &header, size_t eor)
 {
-	kill(_cgi_pid, SIGKILL);
-	waitpid(_cgi_pid, NULL, 0); // is it usefull? kernel would collect
-	_cgi_state = NONE;
-}
-
-static std::string extract_host(const std::string &request, size_t eor)
-{
-	size_t host_index = request.find("Host:");
-	if (host_index == std::string::npos || host_index > eor)
+	size_t header_index = request.find(header);
+	if (header_index == std::string::npos || header_index > eor)
 		return std::string("");
-	host_index += 5;
-	while (isspace(request[host_index]))
-		++host_index;
-	size_t end_of_path = request.find("\r\n", host_index);
-	size_t port_index = request.find(":", host_index);
-	if (port_index == std::string::npos || port_index > eor)
-		return request.substr(host_index, end_of_path - host_index);
-	return request.substr(host_index, port_index - host_index);
+	header_index += header.size();
+	while (isspace(request[header_index]))
+		++header_index;
+	size_t end_of_header = request.find("\r\n", header_index);
+	if (end_of_header == std::string::npos || end_of_header > eor)
+		return std::string("");
+	return request.substr(header_index, end_of_header - header_index);
 }
 
 static const std::string &get_mime(const std::string &filepath)
@@ -136,6 +182,7 @@ static bool is_in_accept(const std::string &filepath, const std::string &request
 
 void Client::_setMethod(void)
 {
+	// this can't crash, since there is at least "\r\n\r\n" in _request_buf
 	switch (_request_buf[0]) {
 		case 'G':
 			_method = HTTP::GET;
@@ -143,7 +190,7 @@ void Client::_setMethod(void)
 		case 'P':
 			switch (_request_buf[1]) {
 				case 'U':
-					_method = HTTP::POST;
+					_method = HTTP::PUT;
 					break;
 				case 'O':
 					_method = HTTP::POST;
@@ -163,59 +210,84 @@ void Client::_setMethod(void)
 	}
 }
 
-void Client::parseRequest(void)
+void Client::_parseRequest(void)
 {
+	// TODO: if Connection: close in header, then close connection after answer
 	size_t first_space = _request_buf.find(' ');
 	size_t second_space = _request_buf.find(' ', first_space + 1);
 
-	try {
-		if (first_space == std::string::npos || second_space == std::string::npos || first_space >= _eor)
-			throw RequestParsingException(HTTP_BAD_REQUEST);
+	_state = ANSWER;
+	if (first_space == std::string::npos || second_space == std::string::npos || first_space >= _eor)
+		throw RequestParsingException(HTTP_BAD_REQUEST);
 
-		_setMethod();
+	_setMethod();
 
-		const std::string path = _request_buf.substr(first_space + 1, second_space - first_space - 1);
-		const std::string host = extract_host(_request_buf, _eor);
-		if (host.size() == 0)
-			throw RequestParsingException(HTTP_BAD_REQUEST);
+	const std::string path = _request_buf.substr(first_space + 1, second_space - first_space - 1);
+	std::string host = extract_header_value(_request_buf, std::string("Host:"), _eor);
+	size_t port_index = host.find(":");
+	if (port_index != std::string::npos)
+		host = host.substr(0, port_index);
+	if (host.size() == 0)
+		throw RequestParsingException(HTTP_BAD_REQUEST);
 
-		// match config
-		_matchConfig(host, path);
-		if (_config->isUnauthorizedMethod(_method))
-			throw RequestParsingException(HTTP_METHOD_NOT_ALLOWED);		
-		_static_filepath = _config->getFilepath(path);
+	// match config
+	_matchConfig(host, path);
+	if (_config->isUnauthorizedMethod(_method))
+		throw RequestParsingException(HTTP_METHOD_NOT_ALLOWED);		
+	_static_filepath = _config->getFilepath(path);
 
-		// if is POST or PUT:
-		// need content-length else 411 Length Required
-		// do we already have the data? 
-		// yes -> execute and send Response
-		// no -> readHandler = bodyHandler
-		// _response_handler = sendCreationResponse;
-		// return ;
-	} catch (RequestParsingException &e) {
-		_http_status = e.getHttpStatus();
-		_response_handler = &Client::_sendErrorResponse;
-		_request_buf.erase(0, _eor + 4); // _eor + 4 end characters of HTTP request
-		return ;
-	}
-
+	// identify query
 	if (_config->isCGI(_static_filepath)) {
 		_response_handler = &Client::_sendCGIResponse;
 		_prepareCGI();
 		return ;
 	} else if (_config->isRedirect()) {
 		_response_handler = &Client::_sendRedirectResponse;
-	} else {
-		if (!is_in_accept(_static_filepath, _request_buf, _eor)) {
-			_http_status = HTTP_NOT_ACCEPTABLE;
-			_response_handler = &Client::_sendErrorResponse;
-		} else {
-			_response_handler = &Client::_sendStaticResponse;
-		}
+		return ;
 	}
 
-	// TODO check if auto_index actived to render folder page
-	_request_buf.erase(0, _eor + 4); // _eor + 4 end characters of HTTP request
+	if (_method == HTTP::POST || _method == HTTP::PUT) {
+		// INVESTIGATE: can't upload more that MAX_INT byte
+		if (_static_filepath[_static_filepath.size() - 1] == '/')
+			throw RequestParsingException(HTTP_METHOD_NOT_ALLOWED);
+		int max_size = _config->getBodyLimit();
+		if (max_size == 0)
+			max_size = INT_MAX;
+		std::string content_length = extract_header_value(_request_buf, std::string("Content-Length:"), _eor);
+		if (content_length.size() == 0)
+			throw RequestParsingException(HTTP_LENGTH_REQUIRED);
+		_body_size = atoi(content_length.c_str());
+		if (_body_size <= 0)
+			throw RequestParsingException(HTTP_LENGTH_REQUIRED);
+		// do we already have the data?
+		if (_body_size > _config->getBodyLimit())
+			throw RequestParsingException(HTTP_PAYLOAD_TOO_LARGE);
+		if (_request_buf.size() - _eor >= (size_t)_body_size) {
+			if (_createFile())
+				throw RequestParsingException(HTTP_INTERNAL_SERVER_ERROR);
+			_response_handler = &Client::_sendOk;
+			return ;
+		}
+		_read_handler = &Client::_bodyHandler;
+		_state = REQUEST_START_WAIT;
+		return ;
+	}
+	if (!is_in_accept(_static_filepath, _request_buf, _eor)) {
+		_http_status = HTTP_NOT_ACCEPTABLE;
+		_response_handler = &Client::_sendErrorResponse;
+	} else {
+		_response_handler = &Client::_sendStaticResponse;
+	}
+}
+
+bool Client::_createFile(void)
+{
+	int fd = open(_static_filepath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+	if (fd < 0)
+		return true;
+	if (write(fd, _request_buf.substr(_eor + 4, _body_size).c_str(), _body_size) < 0) // TODO check that the whole file was written
+		return true;
+	return false;
 }
 
 // PRIVATE
@@ -300,7 +372,7 @@ void Client::_sendErrorResponse(void)
 	_prepareHeaders(header_stream, error.size(), std::string(".html"));
 	header_stream << error;
 	send_with_throw(_fd, header_stream.str(), "failed to send error headers to client");
-	_state = RECEIVING;
+	_state = REQUEST_START_WAIT;
 }
 
 void Client::_sendStaticResponse(void)
@@ -324,17 +396,20 @@ void Client::_sendStaticResponse(void)
 
     // Check if the file descriptor corresponds to a directory
 	_http_status = HTTP_OK;
-	if (S_ISDIR(file_stat.st_mode) && !_config->getAutoIndex()) {
+	if (S_ISDIR(file_stat.st_mode) && !_config->isAutoIndex()) {
 		close(fd);
 		_http_status = HTTP_NOT_FOUND;
 		return _sendErrorResponse();
 	}
     if (S_ISDIR(file_stat.st_mode)) {
+		// TODO: INVESTIGATE: what happen if some inner location has a redirect?? true path wouldn't go to file !
 		// send directory
 		DIR *dir = fdopendir(fd);
 
-		if (dir == NULL)
+		if (dir == NULL) {
+			close(fd);
 			throw std::runtime_error("failed to open directory");
+		}
 
 		// Start constructing HTML
 		body_stream << "<html>\n<head>\n<title>Index of Folder</title>\n</head>\n<body>\n";
@@ -366,11 +441,13 @@ void Client::_sendStaticResponse(void)
 	}
 	close(fd);
 
-	const std::string &mime_type = get_mime(_static_filepath);
-	_prepareHeaders(header_stream, body_stream.str().size(), mime_type);
+	size_t last_point = _static_filepath.find_last_of('.');
+	if (last_point == std::string::npos)
+		last_point = _static_filepath.size();
+	_prepareHeaders(header_stream, body_stream.str().size(), _static_filepath.substr(last_point, _static_filepath.size() - last_point));
 	header_stream << body_stream.str();
 	send_with_throw(_fd, header_stream.str(), "failed to send file data to client");
-	_state = RECEIVING;
+	_state = REQUEST_START_WAIT;
 }
 
 void Client::_sendRedirectResponse(void)
@@ -379,12 +456,20 @@ void Client::_sendRedirectResponse(void)
 	std::stringstream header_stream;
 	_prepareHeaders(header_stream, 0, std::string());
 	send_with_throw(_fd, header_stream.str(), "failed to send redirect to client");
-	_state = RECEIVING;
+	_state = REQUEST_START_WAIT;
 }
 
+void Client::_stopCGI(void)
+{
+	kill(_cgi_pid, SIGKILL);
+	waitpid(_cgi_pid, NULL, 0); // is it usefull? kernel would collect
+	_cgi_state = NONE;
+}
+
+// TODO: INVESTIGATE: this seems pretty slow, could this be just python slow ?
 void Client::_sendCGIResponse(void)
 {
-	if (_cgi_state == NONE) // CGI got _stopCGI() -> client is getting destroyed
+	if (_cgi_state == NONE) // just in case
 		return ;
 
 	if (std::difftime(_last_activity, _cgi_start) > GATEWAY_TIMEOUT) {
@@ -430,6 +515,16 @@ void Client::_sendCGIResponse(void)
 	}
 	close(_cgi_pipe[0]);
 	send_with_throw(_fd, _cgi_stream.str(), "failed to send CGI to client");
-	_state = RECEIVING;
+	_state = REQUEST_START_WAIT;
 	_cgi_stream.clear();
+}
+
+
+void Client::_sendOk(void)
+{
+	_http_status = HTTP_OK;
+	std::stringstream header_stream;
+	_prepareHeaders(header_stream, 0, std::string());
+	send_with_throw(_fd, header_stream.str(), "failed to send OK to client");
+	_state = REQUEST_START_WAIT;
 }

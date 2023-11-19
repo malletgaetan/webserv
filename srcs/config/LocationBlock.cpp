@@ -112,12 +112,12 @@ const std::string LocationBlock::getFilepath(const std::string &path) const
 	return join_path(_root, path.substr(_location.size(), path.size() - _location.size()));
 }
 
-int LocationBlock::getBodySize(void) const
+int LocationBlock::getBodyLimit(void) const
 {
 	return _body_limit;
 }
 
-bool LocationBlock::getAutoIndex(void) const
+bool LocationBlock::isAutoIndex(void) const
 {
 	return _auto_index;
 }

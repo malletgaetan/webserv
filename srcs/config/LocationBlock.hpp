@@ -41,8 +41,8 @@ class LocationBlock {
 		LocationBlock(const LocationBlock *b, const std::string &location, std::ifstream &f);
 		~LocationBlock();
 		void printConfiguration(int indentation) const;
-		int getBodySize(void) const;
-		bool getAutoIndex(void) const;
+		int getBodyLimit(void) const;
+		bool isAutoIndex(void) const;
 		bool isRedirect(void) const;
 		const std::string &getRedirection(void) const;
 		const std::string &getRoot(void) const;

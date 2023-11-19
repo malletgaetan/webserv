@@ -4,7 +4,6 @@
 #include <string>
 
 // TODO: macros to enum?
-// TODO: missing HTTP_PAYLOAD_TOO_LARGE (body_limit)
 
 #define HTTP_OK 200
 #define HTTP_PERMANENT_REDIRECT 308
@@ -12,6 +11,8 @@
 #define HTTP_NOT_FOUND 404
 #define HTTP_METHOD_NOT_ALLOWED 405
 #define HTTP_NOT_ACCEPTABLE 406
+#define HTTP_LENGTH_REQUIRED 411
+#define HTTP_PAYLOAD_TOO_LARGE 413
 #define HTTP_REQUEST_TIMEOUT_ERROR 408
 #define HTTP_INTERNAL_SERVER_ERROR 500
 #define HTTP_GATEWAY_TIMEOUT 504
@@ -21,6 +22,7 @@ namespace HTTP {
 		GET,
 		HEAD,
 		POST,
+		PUT,
 		DELETE
 	};
 	void  init_maps(void);

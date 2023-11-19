@@ -132,7 +132,7 @@ namespace HTTP {
 		init_mimes();
 		definitions[HTTP_OK] = "OK";
 
-		std::string badRequest = "<html>"
+		errors[HTTP_BAD_REQUEST] = "<html>"
 			"<head>"
 				"<title>400 Bad Request</title>"
 			"</head>"
@@ -140,10 +140,9 @@ namespace HTTP {
 				"<h1>Bad Request</h1>"
 			"</body>"
 			"</html>";
-		errors[HTTP_BAD_REQUEST] = badRequest;
 		definitions[HTTP_BAD_REQUEST] = "Bad Request";
 
-		std::string notFound = "<html>"
+		errors[HTTP_NOT_FOUND] = "<html>"
 			"<head>"
 				"<title>404 Not Found</title>"
 			"</head>"
@@ -151,10 +150,9 @@ namespace HTTP {
 				"<h1>Not Found</h1>"
 			"</body>"
 			"</html>";
-		errors[HTTP_NOT_FOUND] = notFound;
 		definitions[HTTP_NOT_FOUND] = "Not Found";
 
-		std::string internalServerError = "<html>"
+		errors[HTTP_INTERNAL_SERVER_ERROR] = "<html>"
 			"<head>"
 				"<title>500 Internal Server Error</title>"
 			"</head>"
@@ -162,10 +160,9 @@ namespace HTTP {
 				"<h1>Internal Server Error</h1>"
 			"</body>"
 			"</html>";
-		errors[HTTP_INTERNAL_SERVER_ERROR] = internalServerError;
 		definitions[HTTP_INTERNAL_SERVER_ERROR] = "Internal Server Error";
 
-		std::string requestTimeoutError = "<html>"
+		errors[HTTP_REQUEST_TIMEOUT_ERROR] = "<html>"
 			"<head>"
 				"<title>408 Request Timeout</title>"
 			"</head>"
@@ -173,10 +170,9 @@ namespace HTTP {
 				"<h1>Request Timeout</h1>"
 			"</body>"
 			"</html>";
-		errors[HTTP_REQUEST_TIMEOUT_ERROR] = requestTimeoutError;
 		definitions[HTTP_REQUEST_TIMEOUT_ERROR] = "Request Timeout";
 
-		std::string methodNotAllowed = "<html>"
+		errors[HTTP_METHOD_NOT_ALLOWED] = "<html>"
 			"<head>"
 				"<title>405 Method Not Allowed</title>"
 			"</head>"
@@ -184,10 +180,29 @@ namespace HTTP {
 				"<h1>Method Not Allowed</h1>"
 			"</body>"
 			"</html>";
-		errors[HTTP_METHOD_NOT_ALLOWED] = methodNotAllowed;
 		definitions[HTTP_METHOD_NOT_ALLOWED] = "Method Not Allowed";
 
-		std::string notAcceptable = "<html>"
+		errors[HTTP_LENGTH_REQUIRED] = "<html>"
+			"<head>"
+				"<title>411 Length Required</title>"
+			"</head>"
+			"<body>"
+				"<h1>Length Required</h1>"
+			"</body>"
+			"</html>";
+		definitions[HTTP_LENGTH_REQUIRED] = "Length Required";
+
+		errors[HTTP_PAYLOAD_TOO_LARGE] = "<html>"
+			"<head>"
+				"<title>413 Payload Too Large</title>"
+			"</head>"
+			"<body>"
+				"<h1>Payload Too Large</h1>"
+			"</body>"
+			"</html>";
+		definitions[HTTP_PAYLOAD_TOO_LARGE] = "Payload Too Large";
+
+		errors[HTTP_NOT_ACCEPTABLE] = "<html>"
 			"<head>"
 				"<title>406 Not Acceptable</title>"
 			"</head>"
@@ -195,7 +210,6 @@ namespace HTTP {
 				"<h1>406 Not Acceptable</h1>"
 			"</body>"
 			"</html>";
-		errors[HTTP_NOT_ACCEPTABLE] = notAcceptable;
 		definitions[HTTP_NOT_ACCEPTABLE] = "Not Acceptable";
 
 		errors[HTTP_GATEWAY_TIMEOUT] = "<html>"

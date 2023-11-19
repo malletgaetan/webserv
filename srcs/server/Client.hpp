@@ -2,6 +2,7 @@
 
 extern "C" {
 #include <fcntl.h>
+#include <limits.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -30,8 +31,9 @@ enum CGIState {
 };
 
 enum State {
-	RECEIVING,
-	SENDING
+	REQUEST_START_WAIT,
+	REQUEST_END_WAIT,
+	ANSWER
 };
 
 class RequestParsingException : public std::exception {
@@ -65,7 +67,6 @@ class Client
 		void sendInternalServerError(void);
 		void readHandler(void); // return whether client should be deleted
 		void writeHandler(void);
-		void parseRequest(void);
 	private:
 	    typedef void (Client::*Handler)(void);
 		static char *_buf;
@@ -84,7 +85,10 @@ class Client
 		std::stringstream _cgi_stream;
 		int _cgi_pipe[2];
 		int _cgi_pid;
+		int _body_size;
 
+		bool _createFile(void);
+		void _parseRequest(void);
 		void _setMethod(void);
 		int _prepareCGI(void);
 		void _requestHandler(void);
@@ -96,4 +100,5 @@ class Client
 		void _sendStaticResponse(void);
 		void _sendCGIResponse(void);
 		void _sendRedirectResponse(void);
+		void _sendOk(void);
 };
