@@ -107,7 +107,7 @@ bool LocationBlock::isUnauthorizedMethod(HTTP::Method method) const
 
 const std::string LocationBlock::getFilepath(const std::string &path) const
 {
-	if (path == _location)
+	if (path[path.size() - 1] == '/')
 		return join_path(_root, _index_str);
 	return join_path(_root, path.substr(_location.size(), path.size() - _location.size()));
 }
