@@ -269,7 +269,7 @@ void Client::_parseRequest(void)
 			throw RequestParsingException(HTTP_LENGTH_REQUIRED);
 		_body_size = atoi(content_length.c_str());
 		if (_body_size <= 0)
-			throw RequestParsingException(HTTP_LENGTH_REQUIRED);
+			throw RequestParsingException(HTTP_LENGTH_REQUIRED); // INVESTIGATE: hmh, how to handle this case? BAD_REQUEST?
 		// do we already have the data?
 		if (_body_size > _config->getBodyLimit())
 			throw RequestParsingException(HTTP_PAYLOAD_TOO_LARGE);
