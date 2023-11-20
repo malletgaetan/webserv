@@ -17,8 +17,15 @@ ServerBlock::ServerBlock(std::ifstream &f, int default_port): LocationBlock()
 		}
 		if (line.compare(_index, 6, std::string("listen")) == 0) {
 			_index += 6;
-			while (line[_index] != ';')
-				_ports.push_back(_parseInt(line));
+			while (line[_index] != ';') {
+				int new_port = _parseInt(line);
+				for (size_t i = 0; i < _ports.size(); i++) {
+					if (_ports[i] == new_port)
+						throw ConfigParsingException("cannot listen twice on the same port at line %zu", Config::line);
+				}
+				_ports.push_back(new_port);
+
+			}
 			if (_ports.back() < 0 || _ports.back() > 65535)
 				throw ConfigParsingException("invalid range for listen port at line %zu column %zu", Config::line, _index);
 			expect_end_of_content(line, _index);
