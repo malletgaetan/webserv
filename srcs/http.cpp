@@ -131,6 +131,7 @@ namespace HTTP {
 	{
 		init_mimes();
 		definitions[HTTP_OK] = "OK";
+		definitions[HTTP_PERMANENT_REDIRECT] = "Permanent Redirect";
 
 		errors[HTTP_BAD_REQUEST] = "<html>"
 			"<head>"

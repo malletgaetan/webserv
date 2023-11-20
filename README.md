@@ -1,6 +1,21 @@
-# HTTP/1.1 Web Server
+# Start server
 
-## Configuration
+Build executable
+```
+git clone https://github.com/malletgaetan/webserv/ && cd webserv && make
+```
+
+See help
+```bash
+./webserv
+```
+
+Run the server
+```bash
+./webserv <config_file>
+```
+
+# Configuration
 
 ## Inheritance
 
