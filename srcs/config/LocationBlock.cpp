@@ -10,20 +10,16 @@ LocationBlock::LocationBlock(void):  _index(0), _body_limit(0), _auto_index(fals
 	_methods.push_back(HTTP::GET);
 }
 
-LocationBlock::LocationBlock(const LocationBlock *b, const std::string &location, std::ifstream &f): _index(0), _body_limit(b->_body_limit), _auto_index(b->_auto_index), _root(b->_root), _location(location), _methods(b->_methods)
+LocationBlock::LocationBlock(const LocationBlock *b, const std::string &location, std::ifstream &f): _index(0), _body_limit(b->_body_limit), _auto_index(b->_auto_index), _cgi_extension(b->_cgi_extension), _cgi_path(b->_cgi_path), _root(b->_root), _location(location), _methods(b->_methods)
 {
 	// only these attributes are inherited from parent
-	const int base_line = Config::line;
 	for (std::string line; std::getline(f, line);) {
 		++Config::line;
 		_index = skip_whitespaces(line, 0);
 		if (_index == line.size() || line[_index] == '#' || line[_index] == ';')
 			continue ;
-		if (line[_index] == '}') {
-			if (_redirection.size() == 0 && _auto_index == false && _index_str.size() == 0)
-				throw ConfigParsingException("Location block at line %zu should at least contain one of 'auto_index' | 'index' | 'redirect'", base_line);
+		if (line[_index] == '}')
 			return ;
-		}
 		_parseAttribute(line, f);
 	}
 	throw ConfigParsingException("expected '}' but got EOF at line %zu", Config::line);

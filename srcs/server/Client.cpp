@@ -7,6 +7,8 @@
 # define CGI_INTERNAL_SERVER_ERROR 1
 # define CGI_NOT_FOUND 2
 
+// TODO implement 403 when asked a directory without index | redirection | auto_index
+
 // PUBLIC
 
 Client::Client(int fd, const std::map<const std::string, const ServerBlock *> *servers_by_host): _servers_by_host(servers_by_host), _state(REQUEST_START_WAIT), _fd(fd), _read_handler(&Client::_requestHandler), _config(NULL), _cgi_state(NONE)
@@ -245,18 +247,17 @@ void Client::_parseRequest(void)
 		return ;
 	}
 
+	if (!_config->isAutoIndex() && _static_filepath[_static_filepath.size() - 1] == '/')
+		throw RequestParsingException(HTTP_FORBIDDEN);
 	if (_method == HTTP::DELETE) {
 		if (_static_filepath[_static_filepath.size() - 1] == '/')
 			throw RequestParsingException(HTTP_METHOD_NOT_ALLOWED);
 		_deleteFile();
 		_response_handler = &Client::_sendOk;
 	} else if (_method == HTTP::GET || _method == HTTP::HEAD) {
-		if (!is_in_accept(_static_filepath, _request_buf, _eor)) {
-			_http_status = HTTP_NOT_ACCEPTABLE;
-			_response_handler = &Client::_sendErrorResponse;
-		} else {
-			_response_handler = &Client::_sendStaticResponse;
-		}
+		if (!is_in_accept(_static_filepath, _request_buf, _eor))
+			throw RequestParsingException(HTTP_NOT_ACCEPTABLE);
+		_response_handler = &Client::_sendStaticResponse;
 	} else {
 		// INVESTIGATE: can't upload more that MAX_INT byte
 		if (_static_filepath[_static_filepath.size() - 1] == '/')

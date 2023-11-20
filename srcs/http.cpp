@@ -220,8 +220,17 @@ namespace HTTP {
 				"<h1>Gateway timeout</h1>"
 			"</body>"
 			"</html>";
-;
 		definitions[HTTP_GATEWAY_TIMEOUT] = "Gateway Timeout";
+
+		errors[HTTP_FORBIDDEN] = "<html>"
+			"<head>"
+				"<title>403 Forbidden</title>"
+			"</head>"
+			"<body>"
+				"<h1>Forbidden</h1>"
+			"</body>"
+			"</html>";
+		definitions[HTTP_FORBIDDEN] = "Forbidden";
 	}
 
 	const std::string &default_error(int http_status)
