@@ -247,7 +247,7 @@ void Client::_parseRequest(void)
 		return ;
 	}
 
-	if (!_config->isAutoIndex() && _static_filepath[_static_filepath.size() - 1] == '/')
+	if (!_config->isAutoIndex() && (_static_filepath[_static_filepath.size() - 1] == '/' || _static_filepath.size() == 0))
 		throw RequestParsingException(HTTP_FORBIDDEN);
 	if (_method == HTTP::DELETE) {
 		if (_static_filepath[_static_filepath.size() - 1] == '/')
