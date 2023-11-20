@@ -37,6 +37,7 @@ class Config {
 					throw ConfigParsingException("unrecognized attribute at line %zu column %zu", Config::line, index);
 				}
 			}
+
 			for (size_t i = 0; i < _servers.size(); ++i) {
 				const std::vector<int> &p = _servers[i].getPorts();
 				for (size_t j = 0; j < p.size(); j++) {
