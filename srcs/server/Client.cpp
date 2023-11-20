@@ -300,6 +300,7 @@ void Client::_createFile(void)
 }
 
 // PRIVATE
+// TODO: CGI need to be executed with correct relative path
 int Client::_prepareCGI(void)
 {
 	int inpipe[2];
