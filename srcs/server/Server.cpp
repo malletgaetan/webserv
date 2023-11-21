@@ -36,14 +36,15 @@ void Server::stop(void)
 
 	// close servers
 	for (size_t i = 0; i < Config::ports.size(); i++) {
-		close(_servers[i].second);
+		close(_servers[i].first);
 	}
 
 	// close clients
 	while (iter != _clients.end()) {
 		c = iter->second;
 		++iter;
-		_removeClient(c);
+		_clients.erase(c->getFd());
+		delete c;
 	}
 }
 
