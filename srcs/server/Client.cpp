@@ -98,24 +98,30 @@ void Client::_requestHandler(void)
 				return ;
 			}
 			ssize_t sor = request_identifier - 1;  // start of request
-			int nb_space = 0;
-			while (nb_space < 3) {
+			int space_nb = 0;
+			while (true) {
 				if (sor < 0) {
-					if (nb_space == 2) {
-						++nb_space;
-						break ;
-					}
-					_request_buf.erase(0, request_identifier + 12);
+					if (space_nb == 2)
+						++sor;
 					break ;
 				}
-				if (isspace(_request_buf[sor]))
-					++nb_space;
-				--sor;
+				if (isspace(_request_buf[sor])) {
+					if (space_nb == 2) {
+						++sor;
+						break;
+					}
+					++space_nb;
+					while (sor >= 0 && isspace(_request_buf[sor]))
+						--sor;
+				} else {
+					--sor;
+				}
 			}
-			if (nb_space < 3)
+			if (space_nb != 2 || sor < 0) {
+				_request_buf.erase(0, request_identifier + 12);
 				continue ;
-			if (sor != -1)
-				_request_buf.erase(0, sor);
+			}
+			_request_buf.erase(0, sor);
 			break ;
 		}
 		_state = REQUEST_END_WAIT;
