@@ -13,13 +13,17 @@ LocationBlock::LocationBlock(void):  _index(0), _body_limit(0), _auto_index(fals
 LocationBlock::LocationBlock(const LocationBlock *b, const std::string &location, std::ifstream &f): _index(0), _body_limit(b->_body_limit), _auto_index(b->_auto_index), _cgi_extension(b->_cgi_extension), _cgi_path(b->_cgi_path), _root(b->_root), _location(location), _methods(b->_methods)
 {
 	// only these attributes are inherited from parent
+	const int start_line = Config::line;
 	for (std::string line; std::getline(f, line);) {
 		++Config::line;
 		_index = skip_whitespaces(line, 0);
 		if (_index == line.size() || line[_index] == '#' || line[_index] == ';')
 			continue ;
-		if (line[_index] == '}')
+		if (line[_index] == '}') {
+			if (_index_str.size() != 0 && _auto_index)
+				throw ConfigParsingException("cannot set index and auto_index in the same block at line %zu", start_line);
 			return ;
+		}
 		_parseAttribute(line, f);
 	}
 	throw ConfigParsingException("expected '}' but got EOF at line %zu", Config::line);
@@ -84,7 +88,7 @@ std::pair<size_t, const LocationBlock *> LocationBlock::matchLocation(const std:
 			if (path.size() == index + it->first.size()) // total match
 				return std::pair<size_t, const LocationBlock *>(index + it->first.size(), &(it->second));
 			std::pair<size_t, const LocationBlock *> tmp = it->second.matchLocation(path, index + it->first.size() - (int)(it->first.size() == 1));
-			if (tmp.first > ret.first)
+			if (tmp.first >= ret.first)
 				ret = tmp;
 		}
 	}
@@ -246,18 +250,12 @@ void	LocationBlock::_parseMethods(const std::string &line)
 		if (line.compare(_index, 3, "get") == 0) {
 			_index += 3;
 			_methods.push_back(HTTP::GET);
-		} else if (line.compare(_index, 4, "head") == 0) {
-			_index += 4;
-			_methods.push_back(HTTP::HEAD);
 		} else if (line.compare(_index, 4, "post") == 0) {
 			_index += 4;
 			_methods.push_back(HTTP::POST);
 		} else if (line.compare(_index, 6, "delete") == 0) {
 			_index += 6;
 			_methods.push_back(HTTP::DELETE);
-		} else if (line.compare(_index, 3, "put") == 0) {
-			_index += 3;
-			_methods.push_back(HTTP::PUT);
 		} else {
 			throw ConfigParsingException("unrecognized http method at line %zu column %zu", Config::line, _index);
 		}
@@ -392,12 +390,8 @@ void LocationBlock::_printState(int indentation) const
 				std::cout << "GET";
 			} else if (_methods[i] == HTTP::POST) {
 				std::cout << "POST";
-			} else if (_methods[i] == HTTP::DELETE) {
-				std::cout << "DELETE";
-			} else if (_methods[i] == HTTP::PUT){
-				std::cout << "PUT";
 			} else {
-				std::cout << "HEAD";
+				std::cout << "DELETE";
 			}
 		}
 		std::cout << std::endl;

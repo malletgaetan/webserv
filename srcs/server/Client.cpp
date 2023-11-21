@@ -7,8 +7,6 @@
 # define CGI_INTERNAL_SERVER_ERROR 1
 # define CGI_NOT_FOUND 2
 
-// TODO implement 403 when asked a directory without index | redirection | auto_index
-
 // PUBLIC
 
 Client::Client(int fd, const std::map<const std::string, const ServerBlock *> *servers_by_host): _servers_by_host(servers_by_host), _state(REQUEST_START_WAIT), _fd(fd), _read_handler(&Client::_requestHandler), _config(NULL), _cgi_state(NONE)
@@ -189,19 +187,7 @@ void Client::_setMethod(void)
 			_method = HTTP::GET;
 			break;
 		case 'P':
-			switch (_request_buf[1]) {
-				case 'U':
-					_method = HTTP::PUT;
-					break;
-				case 'O':
-					_method = HTTP::POST;
-					break;
-				default:
-					throw RequestParsingException(HTTP_BAD_REQUEST);
-			}
-			break;
-		case 'H':
-			_method = HTTP::HEAD;
+			_method = HTTP::POST;
 			break;
 		case 'D':
 			_method = HTTP::DELETE;
@@ -213,7 +199,6 @@ void Client::_setMethod(void)
 
 void Client::_parseRequest(void)
 {
-	// TODO: if Connection: close in header, then close connection after answer
 	size_t first_space = _request_buf.find(' ');
 	size_t second_space = _request_buf.find(' ', first_space + 1);
 
@@ -254,7 +239,7 @@ void Client::_parseRequest(void)
 			throw RequestParsingException(HTTP_METHOD_NOT_ALLOWED);
 		_deleteFile();
 		_response_handler = &Client::_sendOk;
-	} else if (_method == HTTP::GET || _method == HTTP::HEAD) {
+	} else if (_method == HTTP::GET) {
 		if (!is_in_accept(_static_filepath, _request_buf, _eor))
 			throw RequestParsingException(HTTP_NOT_ACCEPTABLE);
 		_response_handler = &Client::_sendStaticResponse;

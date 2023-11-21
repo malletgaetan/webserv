@@ -21,9 +21,7 @@
 namespace HTTP {
 	enum Method {
 		GET,
-		HEAD,
 		POST,
-		PUT,
 		DELETE
 	};
 	void  init_maps(void);
