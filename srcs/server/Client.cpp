@@ -314,6 +314,12 @@ int Client::_prepareCGI(void)
 	}
 	_cgi_pid = fork();
 	if (_cgi_pid == 0) {
+		size_t sep = _static_filepath.find_last_of("/");
+		const std::string dir = _static_filepath.substr(0, sep);
+		const std::string filename = _static_filepath.substr(sep + 1, _static_filepath.size() - dir.size() - 1);
+		close(STDERR_FILENO);
+		if (chdir(dir.c_str()) != 0)
+			exit(CGI_NOT_FOUND);
 		// TODO: redirect stderr to /dev/null
 		if (close(inpipe[1]) < 0)
 			exit(CGI_INTERNAL_SERVER_ERROR);
@@ -330,7 +336,7 @@ int Client::_prepareCGI(void)
 			exit(CGI_INTERNAL_SERVER_ERROR);
 		const char *arr[3];
 		arr[0] = _config->getCGIExecutable().c_str();
-		arr[1] = _static_filepath.c_str();
+		arr[1] = filename.c_str();
 		arr[2] = NULL; 
 		execve(arr[0],(char* const*)arr, NULL); // nice cast bro
 		exit(CGI_NOT_FOUND);
