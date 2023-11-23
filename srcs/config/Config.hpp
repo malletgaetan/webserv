@@ -15,7 +15,6 @@ class Config {
 	private:
 		static std::vector<ServerBlock> _servers;
 		static std::map<int, std::map<const std::string, const ServerBlock *> > _ordered_servers;
-
 	public:
 		static size_t	line;
 		static std::vector<int> ports;
@@ -59,3 +58,4 @@ class Config {
 			return &_ordered_servers[port];
 		}
 };
+

@@ -225,7 +225,7 @@ void Client::_parseRequest(void)
 	// match config
 	_matchConfig(host, path);
 	if (_config->isUnauthorizedMethod(_method))
-		throw RequestParsingException(HTTP_METHOD_NOT_ALLOWED);		
+		throw RequestParsingException(HTTP_METHOD_NOT_ALLOWED);
 	_static_filepath = _config->getFilepath(path);
 
 	// identify query
