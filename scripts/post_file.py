@@ -1,8 +1,6 @@
 import urllib.request
 import sys
 
-if len(sys.argv)
-
 url = sys.argv[1]  # Replace with your endpoint
 file_path = sys.argv[2]  # Replace with the path to your file
 
