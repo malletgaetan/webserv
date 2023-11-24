@@ -40,9 +40,13 @@ class Config {
 			for (size_t i = 0; i < _servers.size(); ++i) {
 				const std::vector<int> &p = _servers[i].getPorts();
 				for (size_t j = 0; j < p.size(); j++) {
+					std::map<int, std::map<const std::string , const ServerBlock *> >::iterator it = _ordered_servers.find(p[j]);
+					if (it == _ordered_servers.end())
+						_ordered_servers[p[j]]["default_server"] = &_servers[i];
 					_ordered_servers[p[j]][_servers[i].getHost()] = &_servers[i];
 				}
 			}
+
 			for (std::map<int, std::map<const std::string, const ServerBlock *> >::const_iterator it = _ordered_servers.begin(); it != _ordered_servers.end(); ++it)
 				ports.push_back(it->first);
 			if (_servers.size() == 0)
